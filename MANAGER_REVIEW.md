@@ -1,286 +1,241 @@
-/**
- * Typed REST client for the Loyalty AI Framework backend.
- *
- * Endpoint shapes here are copied from the ACTUAL backend implementation
- * (backend/app/api/*.py + backend/app/schemas/*.py), not guessed from
- * PLAN.md. Base URL defaults to a relative "/api/v1" so it works via the
- * Vite dev-server proxy (see vite.config.ts) without any env config; set
- * VITE_API_BASE_URL to point at a different backend origin if needed.
- */
+# MANAGER_REVIEW.md — Loyalty AI Framework (Manager Stage, Final)
 
-const API_BASE_URL: string =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
+Independent review of the full architect → coder → tester → (follow-up coder fix)
+pipeline. This is not a rubber stamp: I re-read PLAN.md/TEST_REPORT.md/README.md
+in full, personally inspected the fix and its regression test, and re-ran the
+backend suite from a fresh venv myself. Where I disagree or want stronger
+evidence than "trust the previous stage," that's called out explicitly below.
 
-const TOKEN_STORAGE_KEY = "loyalty_ai_access_token";
+---
 
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_STORAGE_KEY);
-}
+## (a) Plan quality assessment
 
-export function setToken(token: string | null): void {
-  if (token) {
-    localStorage.setItem(TOKEN_STORAGE_KEY, token);
-  } else {
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-  }
-}
+The input ("Loyalty AI Framework Business") is genuinely ambiguous — it could
+be a software build, a business plan, or both. The architect's choice to state
+explicit, defensible assumptions (A1–A7) and proceed, rather than block the
+pipeline on a round trip, was the right call for a 4-stage automated pipeline
+with a human (Oli) available to redirect if wrong — and Oli did confirm the
+direction. The assumption table is genuinely useful: each assumption has a
+one-line rationale, and §7 ("Risks / Open Items") explicitly flags what would
+have to change if the assumptions were wrong (business-plan doc instead of
+software, consumer app instead of B2B, real POS integration required). That's
+good architecture-stage hygiene — it de-risks the ambiguity instead of hiding
+it.
 
-export class ApiError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-    this.name = "ApiError";
-  }
-}
+Scoping to exactly 3 AI capabilities (recommendation, churn, fraud) with a
+4th explicitly marked stretch/optional was the correct tractability call —
+it gave the coder a finishable target and the tester concrete, falsifiable
+acceptance criteria (§6 checklist) instead of vague "AI-powered" hand-waving.
+The acceptance criteria are unusually good for a plan document: they specify
+concrete, checkable behaviors ("members with sparse/old activity score
+meaningfully higher... verifiable against the synthetic data's known lapsing
+cohort," "false-positive rate stays low... define a concrete threshold") that
+a tester can actually fail against, rather than restating feature names.
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const token = getToken();
-  const headers: Record<string, string> = {
-    ...(options.body ? { "Content-Type": "application/json" } : {}),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...((options.headers as Record<string, string>) ?? {}),
-  };
+One gap: PLAN.md never mentions concurrency/race-condition behavior as an
+acceptance criterion anywhere in §6, even though "redemption is rejected if
+balance is insufficient" is listed as a functional requirement. A plan this
+otherwise careful about defining testable criteria should have anticipated
+that "insufficient balance rejected" needs to hold under concurrent access,
+not just sequential — this is a plan-level blind spot, not just a coder/tester
+one. Minor, but worth noting since it's the one thing that nearly shipped
+broken.
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+**Verdict: plan quality is strong.** The assumptions were reasonable, stated
+rather than silently guessed, and revisable. This was a good foundation for
+the downstream stages.
 
-  if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const body = await res.json();
-      detail = body.detail ?? JSON.stringify(body);
-    } catch {
-      // ignore — no JSON body
-    }
-    throw new ApiError(res.status, typeof detail === "string" ? detail : JSON.stringify(detail));
-  }
+---
 
-  if (res.status === 204) {
-    return undefined as T;
-  }
-  return (await res.json()) as T;
-}
+## (b) Implementation fidelity assessment
 
-// ---------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------
+I compared the actual repo layout and behavior against PLAN.md §5 (module
+structure) and §6 (acceptance checklist) rather than trusting the coder's own
+"deviations" section verbatim.
 
-export interface Token {
-  access_token: string;
-  token_type: string;
-}
+- **Structure**: matches PLAN.md's proposed layout closely (`backend/app/{db,api,ai,schemas,services}`,
+  `frontend/src/{pages,components,api}`). Deviations documented in README §6 are
+  minor and reasonable (a `/auth/signup` endpoint added for dev convenience,
+  no dedicated `auth/` subfolder for a single context file).
+- **AI layer**: all three required capabilities (recommender, churn_model,
+  fraud_detector) exist as separate modules under `backend/app/ai/`, matching
+  PLAN.md's file-by-file spec, and are wired to the specified endpoints.
+- **Tech stack**: FastAPI + SQLAlchemy + SQLite/Postgres + React/TS/Vite, as
+  specified — no scope creep into a different stack.
+- **Honesty about gaps**: README §6 openly discloses the frontend has zero
+  automated tests (PLAN.md called for React Testing Library) rather than
+  silently dropping it. I consider this a reasonable, disclosed trade-off
+  given P0–P2 (backend + AI, the actual differentiator) was explicitly
+  prioritized by the plan and the frontend is a thin REST-client dashboard.
+  It is nonetheless a real gap I'd want closed before this goes near paying
+  customers (see §e).
+- **Out-of-scope items** (multi-tenant billing, real POS integration,
+  SSO/OAuth, dynamic pricing) were correctly not attempted, matching PLAN.md
+  §6's explicit non-requirements.
 
-export interface MerchantOut {
-  id: string;
-  business_name: string;
-  email: string;
-}
+**Verdict: faithful implementation.** The coder built what the plan asked for,
+did not silently cut required scope, and disclosed the one deviation
+(frontend tests) that matters.
 
-export function login(email: string, password: string): Promise<Token> {
-  return request<Token>("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-}
+---
 
-export function signup(
-  business_name: string,
-  email: string,
-  password: string
-): Promise<MerchantOut> {
-  return request<MerchantOut>("/auth/signup", {
-    method: "POST",
-    body: JSON.stringify({ business_name, email, password }),
-  });
-}
+## (c) Test/QA quality assessment
 
-export function getMe(): Promise<MerchantOut> {
-  return request<MerchantOut>("/auth/me");
-}
+I independently re-verified the tester's most load-bearing claims rather than
+just reading the report:
 
-// ---------------------------------------------------------------------
-// Members
-// ---------------------------------------------------------------------
+- **Fix quality** (see §d below for full detail): the atomic
+  `UPDATE ... WHERE points_balance >= cost` + rowcount-check pattern in
+  `backend/app/services/ledger.py::redeem_reward` is the textbook-correct way
+  to close a TOCTOU/lost-update race in SQL — not a superficial patch (e.g.
+  it is *not* a mutex, a retry loop, or an app-level lock that would only work
+  within one process; it's enforced by the database itself and holds under
+  both SQLite and Postgres, which the code comments correctly note).
+- **Regression test quality**: `backend/tests/test_redemption_concurrency.py`
+  is a real concurrency test, not theater. It correctly identifies that the
+  standard `TestClient`-based fixture shares one SQLAlchemy session across
+  "concurrent" calls (which would silently mask the exact race being tested),
+  and instead spins up a live background `uvicorn` server so each of 10
+  threaded HTTP requests gets its own DB session — the same shape of race a
+  real production deployment would see. I proved this myself (see §d): I
+  reverted the ledger fix, watched the new test fail with the *exact* original
+  symptom (10/10 succeeding against a 100-point balance), then restored the
+  fix and confirmed 42/42 pass again.
+- **Tester's own rigor**: TEST_REPORT.md itself shows evidence of real
+  adversarial effort, not checkbox-ticking — it reproduced the AI-quality
+  numbers independently (96.09% fraud recall / 0.01% FPR, 97.0 vs 5.3 churn
+  score gap) rather than trusting the coder's self-reported numbers, and it
+  found the one bug that mattered (the race condition) by going outside the
+  existing test suite's own single-request assumption, which is exactly the
+  kind of adversarial thinking a tester stage should provide. I also spot
+  checked the boundary tests for the MAJOR fix
+  (`test_transaction_amount_over_max_is_rejected` /
+  `..._at_max_is_accepted` in `test_transactions.py`) and they assert exact
+  boundary behavior (max+0.01 → 422, max → 201), not just "some validation
+  exists."
 
-export interface MemberWithChurn {
-  id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  points_balance: number;
-  tier: string;
-  is_active: boolean;
-  joined_at: string;
-  last_activity_at: string;
-  churn_risk_score: number | null;
-  churn_risk_band: string | null;
-}
+**Verdict: the tester's pass was genuinely useful, not checkbox theater.**
+It caught a real, financially significant bug the coder's own 39 tests
+structurally could not have found (all sequential), verified it with a clean
+repro, and gave the follow-up coder pass a precise fix direction that was
+followed almost exactly.
 
-export interface MemberCreate {
-  first_name: string;
-  last_name: string;
-  email: string;
-  tier?: string;
-}
+---
 
-export function listMembers(includeChurn = true): Promise<MemberWithChurn[]> {
-  return request<MemberWithChurn[]>(`/members?include_churn=${includeChurn}`);
-}
+## (d) Verification of the post-tester fix — my own evidence
 
-export function getMember(memberId: string): Promise<MemberWithChurn> {
-  return request<MemberWithChurn>(`/members/${memberId}`);
-}
+I did not take the README's "42/42 passing, race condition closed" claim on
+faith. Steps I ran myself, fresh:
 
-export function createMember(payload: MemberCreate): Promise<MemberWithChurn> {
-  return request<MemberWithChurn>("/members", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
+1. **Fresh install**: `cd backend && python3 -m venv <fresh venv> && pip install -r requirements.txt` — installed cleanly, no errors.
+2. **Fresh full suite run**: `python3 -m pytest -q` → **42 passed**, matching
+   the README's claim exactly (same count, no skips/xfails hiding failures).
+3. **Read the fix directly**: `backend/app/services/ledger.py::redeem_reward`
+   (lines ~131–147) replaces the old Python-level "check then decrement" with
+   a single atomic SQL `UPDATE members SET points_balance = points_balance -
+   :cost WHERE id = :id AND points_balance >= :cost`, checks `result.rowcount
+   == 0` to detect failure, and refreshes the ORM object from the
+   now-authoritative DB row afterward. This is a correct, non-superficial fix
+   — the WHERE clause is the actual enforcement mechanism, not a decorative
+   check.
+4. **Read the regression test directly**:
+   `backend/tests/test_redemption_concurrency.py` — confirmed it uses a real
+   background `uvicorn.Server` on its own thread (not the shared-session
+   `TestClient`) and a `ThreadPoolExecutor(max_workers=10)` to fire genuinely
+   concurrent requests, then asserts exactly 1 success / 9 rejections / final
+   balance == 0.
+5. **Adversarial check — reverted the fix myself**: I temporarily replaced
+   the atomic UPDATE with the original naive
+   `if member.points_balance < cost: raise ... else: member.points_balance -= cost`
+   pattern and re-ran only the new test. Result: **it failed**, reproducing
+   the exact original bug —
+   `AssertionError: expected exactly 1 of 10 concurrent redemptions to
+   succeed, got 10: status codes = [200, 200, 200, 200, 200, 200, 200, 200,
+   200, 200]`. I then restored the fix (diffed byte-for-byte back to the
+   original fixed file) and confirmed **42/42 pass again**.
+6. **Major fix (transaction cap)**: confirmed `TransactionCreate.amount_usd`
+   in `backend/app/schemas/transaction.py` now carries `le=settings.max_transaction_amount_usd`
+   in addition to `gt=0`, and the two new boundary tests exercise both sides
+   of the limit correctly.
 
-// ---------------------------------------------------------------------
-// Transactions
-// ---------------------------------------------------------------------
+This is about as strong a verification as is practical without a production
+load test: the fix is structurally correct, the regression test is a real
+concurrency test (proven by making it fail on purpose), and the full suite is
+green from a completely independent install.
 
-export interface TransactionOut {
-  id: string;
-  member_id: string;
-  type: string;
-  amount_usd: number;
-  points: number;
-  channel: string;
-  created_at: string;
-}
+---
 
-export interface TransactionCreate {
-  member_id: string;
-  amount_usd: number;
-  channel?: string;
-}
+## (e) Outstanding minor issues — acceptable to leave for MVP?
 
-export function listTransactions(
-  memberId?: string,
-  limit = 100
-): Promise<TransactionOut[]> {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (memberId) params.set("member_id", memberId);
-  return request<TransactionOut[]>(`/transactions?${params.toString()}`);
-}
+TEST_REPORT.md flagged 4 minor issues plus 2 "notes, not bugs." Only the
+critical + major issues were fixed in the follow-up pass; the minors were
+left. Assessing each on its own merits (not just trusting either prior
+stage's characterization):
 
-export function ingestTransaction(
-  payload: TransactionCreate
-): Promise<TransactionOut> {
-  return request<TransactionOut>("/transactions", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
+1. **NaN input → unhandled 500** — confirmed still present (no
+   `allow_inf_nan=False` or equivalent added to the schema). I agree this is
+   minor in *severity* (no data leakage, no financial impact, requires
+   deliberately malformed input) but I'd push back slightly on "acceptable to
+   leave indefinitely" — it's a genuine unhandled-exception crash path, and
+   it's a two-line fix (`Field(..., allow_inf_nan=False)` or reject
+   non-finite floats explicitly). Acceptable to leave for *this* pass, but
+   it's cheap enough that it shouldn't survive a second round.
+2. **No idempotency protection on transaction ingestion** — genuinely
+   reasonable to leave for MVP. PLAN.md A4 explicitly scopes out real POS
+   integration, and idempotency only matters once a real webhook-retrying
+   integration exists. Correctly triaged as out-of-scope-for-now, not
+   ignored-because-lazy.
+2. **No field length limits on member fields** — low severity, real but
+   low-likelihood-at-MVP-scale DoS-via-storage-bloat vector. Fine to leave,
+   trivial to fix later (add `max_length` to Pydantic schemas).
+3. **Seed script bcrypt/passlib traceback cosmetic noise** — purely cosmetic,
+   correctly triaged as non-blocking, though I'd flag it as worth a 5-minute
+   fix before this is ever demoed to a non-technical stakeholder, since a
+   scary traceback on first run undermines confidence regardless of whether
+   it's harmless.
+4. **npm audit: 4 known transitive CVEs (vite/esbuild dev server, react-router
+   open-redirect)** — standard current-React-ecosystem noise, not introduced
+   by coder negligence, not exploitable pre-deployment. Fine to leave, should
+   be tracked (not forgotten) once this moves toward real deployment.
 
-// ---------------------------------------------------------------------
-// Rewards
-// ---------------------------------------------------------------------
+**Overall on the minors: yes, reasonable to leave for a first-pass MVP.**
+None of them touch the core ledger integrity property the critical bug
+threatened, and the plan's own acceptance criteria (§6) don't require them.
+None should block a "done for v1" call. I would explicitly schedule the NaN
+crash and the seed-script traceback as quick wins in whatever comes next,
+since both are cheap and one is a genuine (if low-severity) crash bug.
 
-export interface RewardOut {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  points_cost: number;
-  tier_required: string;
-  active: boolean;
-}
+---
 
-export interface RewardCreate {
-  name: string;
-  description?: string;
-  category?: string;
-  points_cost: number;
-  tier_required?: string;
-}
+## (f) Final verdict and recommended next steps
 
-export interface RedemptionOut {
-  id: string;
-  member_id: string;
-  reward_id: string;
-  points_spent: number;
-  status: string;
-}
+**GO — ship this as the MVP v1, with two cheap follow-ups scheduled, not
+blocking.**
 
-export function listRewards(): Promise<RewardOut[]> {
-  return request<RewardOut[]>("/rewards");
-}
+This pipeline worked the way a 4-stage pipeline is supposed to: the architect
+made reasonable, disclosed assumptions on ambiguous input; the coder built
+what was asked faithfully and disclosed its one real gap (no frontend tests);
+the tester did genuinely adversarial verification and caught a real,
+financially serious bug (the redemption race) that the existing test suite
+was structurally blind to; and the follow-up fix was a correct,
+textbook-appropriate database-level fix backed by a real concurrency
+regression test — which I proved catches the bug by reverting the fix myself
+and watching it fail identically to the tester's original repro, then
+confirmed 42/42 pass with the fix restored, from a completely fresh install.
 
-export function createReward(payload: RewardCreate): Promise<RewardOut> {
-  return request<RewardOut>("/rewards", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
+**What I'd tell a stakeholder in one breath:** the core loyalty ledger — the
+one subsystem this product exists to get right — is now provably correct
+under concurrent access (not just claimed-correct), the AI layer's claims are
+real and independently reproduced (96%+ fraud recall, strong churn cohort
+separation), and nothing left outstanding threatens financial/data integrity.
 
-export function redeemReward(
-  memberId: string,
-  rewardId: string
-): Promise<RedemptionOut> {
-  return request<RedemptionOut>("/rewards/redeem", {
-    method: "POST",
-    body: JSON.stringify({ member_id: memberId, reward_id: rewardId }),
-  });
-}
-
-// ---------------------------------------------------------------------
-// AI layer
-// ---------------------------------------------------------------------
-
-export interface RecommendationOut {
-  reward_id: string;
-  reward_name: string;
-  points_cost: number;
-  score: number;
-  reason: string;
-}
-
-export interface ChurnScoreOut {
-  member_id: string;
-  first_name: string;
-  last_name: string;
-  recency_days: number;
-  frequency: number;
-  monetary: number;
-  churn_risk_score: number;
-  risk_band: string;
-}
-
-export interface FraudAlertOut {
-  id: string;
-  transaction_id: string;
-  member_id: string;
-  reason: string;
-  score: number;
-  details: string;
-  resolved: boolean;
-  created_at: string;
-}
-
-export function getRecommendations(
-  memberId: string,
-  topN = 5
-): Promise<RecommendationOut[]> {
-  return request<RecommendationOut[]>(
-    `/ai/recommendations/${memberId}?top_n=${topN}`
-  );
-}
-
-export function getChurnScores(): Promise<ChurnScoreOut[]> {
-  return request<ChurnScoreOut[]>("/ai/churn");
-}
-
-export function getMemberChurn(memberId: string): Promise<ChurnScoreOut> {
-  return request<ChurnScoreOut>(`/ai/churn/${memberId}`);
-}
-
-export function getFraudAlerts(refresh = true): Promise<FraudAlertOut[]> {
-  return request<FraudAlertOut[]>(`/ai/fraud-alerts?refresh=${refresh}`);
-}
+**Recommended next steps (not blocking a "done" call for v1):**
+1. Fix the NaN-crash and seed-script traceback (cheap, ~30 min combined) —
+   do this before any external demo, not before internal sign-off.
+2. Add frontend automated tests (RTL) before this is customer-facing — this
+   is the one real disclosed gap left in the build, and it's larger than the
+   backend minors.
+3. Track the npm audit CVEs and idempotency gap as backlog items to revisit
+   when a real POS/webhook integration phase begins (per PLAN.md A4) — not
+   urgent now.
+4. No further pipeline round is required before calling this MVP v1 "done."
