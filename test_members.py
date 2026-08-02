@@ -1,0 +1,16 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0.35
+pydantic>=2.9
+pydantic-settings>=2.5
+python-jose[cryptography]>=3.3
+passlib[bcrypt]>=1.7.4
+bcrypt>=3.2,<5
+python-multipart>=0.0.9
+faker>=28.0
+numpy>=1.26
+pandas>=2.2
+scikit-learn>=1.5
+pytest>=8.3
+httpx>=0.27
+email-validator>=2.2
