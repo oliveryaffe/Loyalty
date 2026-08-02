@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Perkwise — AI-powered loyalty for growing retailers</title>
+<meta name="description" content="Perkwise is a loyalty platform with AI built in: personalized rewards, churn prediction, and fraud detection out of the box." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] },
+        colors: {
+          ink: '#0B0E14',
+          plum: '#6D5BFF',
+          coral: '#FF6F5E',
+          mint: '#2FE0C1',
+        }
+      }
+    }
+  }
+</script>
+<style>
+  body { font-family: 'Inter', sans-serif; background: #0B0E14; }
+  .glow {
+    background: radial-gradient(60% 60% at 50% 40%, rgba(109,91,255,0.35) 0%, rgba(11,14,20,0) 70%);
+  }
+  .grad-text {
+    background: linear-gradient(90deg, #6D5BFF 0%, #2FE0C1 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .btn-primary {
+    background: linear-gradient(90deg, #6D5BFF 0%, #8B7CFF 100%);
+    box-shadow: 0 8px 30px rgba(109,91,255,0.35);
+  }
+  .mockup {
+    background: linear-gradient(180deg, #12162090 0%, #0B0E14 100%);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .dot { animation: pulse 2.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+</style>
+</head>
+<body class="text-slate-200 antialiased">
+
+<!-- NAV -->
+<header class="sticky top-0 z-50 backdrop-blur bg-[#0B0E14]/80 border-b border-white/5">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-plum to-mint flex items-center justify-center font-extrabold text-ink">P</div>
+      <span class="text-lg font-bold text-white tracking-tight">Perkwise</span>
+    </div>
+    <nav class="hidden md:flex items-center gap-8 text-sm text-slate-300">
+      <a href="#product" class="hover:text-white transition">Product</a>
+      <a href="#ai" class="hover:text-white transition">AI Layer</a>
+      <a href="#how" class="hover:text-white transition">How it works</a>
+      <a href="#results" class="hover:text-white transition">Results</a>
+    </nav>
+    <div class="flex items-center gap-3">
+      <a href="#" class="hidden sm:inline text-sm text-slate-300 hover:text-white transition">Sign in</a>
+      <a href="#cta" class="btn-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:opacity-90 transition">Get a demo</a>
+    </div>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="relative overflow-hidden glow">
+  <div class="max-w-7xl mx-auto px-6 pt-20 pb-24 relative">
+    <div class="max-w-3xl">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs text-slate-300 mb-6">
+        <span class="w-2 h-2 rounded-full bg-mint dot"></span>
+        Now with real-time fraud detection
+      </div>
+      <h1 class="text-4xl sm:text-6xl font-extrabold text-white leading-[1.05] tracking-tight">
+        Loyalty that gets <span class="grad-text">smarter</span> with every purchase.
+      </h1>
+      <p class="mt-6 text-lg text-slate-400 max-w-2xl">
+        Perkwise is the points-and-rewards platform built for teams who don't want a spreadsheet
+        bolted onto a coupon code. Personalized recommendations, churn prediction, and fraud
+        detection come standard — not as a $50k add-on.
+      </p>
+      <div class="mt-8 flex flex-wrap items-center gap-4">
+        <a href="#cta" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg hover:opacity-90 transition">Get a demo</a>
+        <a href="#product" class="text-slate-200 font-semibold px-6 py-3 rounded-lg border border-white/15 hover:bg-white/5 transition">See how it works</a>
+      </div>
+      <p class="mt-6 text-xs text-slate-500">No credit card required · Set up a working loyalty program in an afternoon</p>
+    </div>
+  </div>
+
+  <!-- floating mock dashboard -->
+  <div class="max-w-6xl mx-auto px-6 -mt-4 pb-20">
+    <div class="mockup rounded-2xl p-4 sm:p-6 shadow-2xl">
+      <div class="flex items-center gap-2 mb-4">
+        <span class="w-3 h-3 rounded-full bg-coral/70"></span>
+        <span class="w-3 h-3 rounded-full bg-amber-400/70"></span>
+        <span class="w-3 h-3 rounded-full bg-mint/70"></span>
+        <span class="ml-3 text-xs text-slate-500">app.perkwise.io/dashboard</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="card rounded-xl p-4">
+          <p class="text-xs text-slate-400">Active members</p>
+          <p class="text-2xl font-bold text-white mt-1">620</p>
+          <p class="text-xs text-mint mt-2">↑ synced from your storefront</p>
+        </div>
+        <div class="card rounded-xl p-4">
+          <p class="text-xs text-slate-400">Churn risk flagged</p>
+          <p class="text-2xl font-bold text-white mt-1">93 members</p>
+          <p class="text-xs text-coral mt-2">RFM scoring, updated live</p>
+        </div>
+        <div class="card rounded-xl p-4">
+          <p class="text-xs text-slate-400">Fraud recall (test set)</p>
+          <p class="text-2xl font-bold text-white mt-1">96.1%</p>
+          <p class="text-xs text-mint mt-2">0.01% false-positive rate</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOGO STRIP -->
+<section class="border-y border-white/5 bg-white/[0.02]">
+  <div class="max-w-7xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+    <p class="text-xs uppercase tracking-widest text-slate-500">Built for retailers who run on repeat customers</p>
+    <div class="flex flex-wrap items-center gap-x-8 gap-y-3 text-slate-500 text-sm font-semibold">
+      <span>Northwind Coffee Co.</span>
+      <span>Harbor &amp; Vine</span>
+      <span>Foundry Goods</span>
+      <span>Palette Studio</span>
+      <span>Kindling Market</span>
+    </div>
+  </div>
+</section>
+
+<!-- PROBLEM / SOLUTION -->
+<section id="product" class="max-w-7xl mx-auto px-6 py-24">
+  <div class="grid md:grid-cols-2 gap-12 items-start">
+    <div>
+      <p class="text-sm font-semibold text-plum uppercase tracking-widest mb-3">The problem</p>
+      <h2 class="text-3xl sm:text-4xl font-bold text-white leading-tight">
+        Most loyalty programs only know one thing about a customer: their points balance.
+      </h2>
+      <p class="mt-4 text-slate-400">
+        Generic tiers. Blanket discounts. No idea who's about to churn, who's worth a
+        better offer, or which "loyal" account is actually a bot farming your signup bonus.
+        That's not a loyalty program — that's a ledger.
+      </p>
+    </div>
+    <div>
+      <p class="text-sm font-semibold text-mint uppercase tracking-widest mb-3">The Perkwise way</p>
+      <h2 class="text-3xl sm:text-4xl font-bold text-white leading-tight">
+        A loyalty engine with a brain, not just a balance.
+      </h2>
+      <p class="mt-4 text-slate-400">
+        Every member gets scored, segmented, and served the right reward automatically.
+        Every transaction gets checked for anomalies in real time. Every merchant gets a
+        dashboard that tells them who to worry about before revenue walks out the door.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- AI FEATURES -->
+<section id="ai" class="bg-white/[0.02] border-y border-white/5">
+  <div class="max-w-7xl mx-auto px-6 py-24">
+    <div class="max-w-2xl mb-14">
+      <p class="text-sm font-semibold text-plum uppercase tracking-widest mb-3">The AI layer</p>
+      <h2 class="text-3xl sm:text-4xl font-bold text-white">Three models, working on every account, all the time.</h2>
+    </div>
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="card rounded-2xl p-6">
+        <div class="w-10 h-10 rounded-lg bg-plum/20 flex items-center justify-center text-plum font-bold mb-4">①</div>
+        <h3 class="text-lg font-semibold text-white">Personalized recommendations</h3>
+        <p class="mt-2 text-sm text-slate-400">
+          Ranks the reward catalog per member from real redemption and purchase history —
+          so the offer they see is the one they'll actually redeem.
+        </p>
+      </div>
+      <div class="card rounded-2xl p-6">
+        <div class="w-10 h-10 rounded-lg bg-coral/20 flex items-center justify-center text-coral font-bold mb-4">②</div>
+        <h3 class="text-lg font-semibold text-white">Churn risk scoring</h3>
+        <p class="mt-2 text-sm text-slate-400">
+          RFM-based scoring surfaces which members are drifting away, weeks before
+          they'd show up as a lost customer in your revenue report.
+        </p>
+      </div>
+      <div class="card rounded-2xl p-6">
+        <div class="w-10 h-10 rounded-lg bg-mint/20 flex items-center justify-center text-mint font-bold mb-4">③</div>
+        <h3 class="text-lg font-semibold text-white">Fraud &amp; anomaly detection</h3>
+        <p class="mt-2 text-sm text-slate-400">
+          Flags abnormal earn velocity and outsized transactions automatically —
+          catching points abuse before it drains your reward budget.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" class="max-w-7xl mx-auto px-6 py-24">
+  <div class="max-w-2xl mb-14">
+    <p class="text-sm font-semibold text-mint uppercase tracking-widest mb-3">How it works</p>
+    <h2 class="text-3xl sm:text-4xl font-bold text-white">Live in an afternoon, not a quarter.</h2>
+  </div>
+  <div class="grid md:grid-cols-4 gap-6">
+    <div>
+      <p class="text-4xl font-extrabold grad-text mb-3">01</p>
+      <h3 class="font-semibold text-white">Connect transactions</h3>
+      <p class="mt-2 text-sm text-slate-400">Point Perkwise at your POS or e-commerce events feed.</p>
+    </div>
+    <div>
+      <p class="text-4xl font-extrabold grad-text mb-3">02</p>
+      <h3 class="font-semibold text-white">Set your program</h3>
+      <p class="mt-2 text-sm text-slate-400">Define earn rules, tiers, and a reward catalog in minutes.</p>
+    </div>
+    <div>
+      <p class="text-4xl font-extrabold grad-text mb-3">03</p>
+      <h3 class="font-semibold text-white">Let the AI layer run</h3>
+      <p class="mt-2 text-sm text-slate-400">Recommendations, churn scores, and fraud alerts update automatically.</p>
+    </div>
+    <div>
+      <p class="text-4xl font-extrabold grad-text mb-3">04</p>
+      <h3 class="font-semibold text-white">Act from one dashboard</h3>
+      <p class="mt-2 text-sm text-slate-400">Your team sees who to reward, who to win back, and what to flag.</p>
+    </div>
+  </div>
+</section>
+
+<!-- RESULTS -->
+<section id="results" class="bg-white/[0.02] border-y border-white/5">
+  <div class="max-w-7xl mx-auto px-6 py-20">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+      <div>
+        <p class="text-4xl font-extrabold text-white">96.1%</p>
+        <p class="mt-2 text-sm text-slate-400">fraud detection recall on seeded test data</p>
+      </div>
+      <div>
+        <p class="text-4xl font-extrabold text-white">0.01%</p>
+        <p class="mt-2 text-sm text-slate-400">false-positive rate on normal activity</p>
+      </div>
+      <div>
+        <p class="text-4xl font-extrabold text-white">42/42</p>
+        <p class="mt-2 text-sm text-slate-400">automated tests passing, including concurrency checks</p>
+      </div>
+      <div>
+        <p class="text-4xl font-extrabold text-white">&lt;1 day</p>
+        <p class="mt-2 text-sm text-slate-400">typical time from setup to a live program</p>
+      </div>
+    </div>
+    <p class="text-center text-xs text-slate-600 mt-8">Figures from Perkwise's own internal QA pass on synthetic benchmark data.</p>
+  </div>
+</section>
+
+<!-- CTA -->
+<section id="cta" class="max-w-5xl mx-auto px-6 py-24 text-center">
+  <h2 class="text-3xl sm:text-5xl font-extrabold text-white leading-tight">
+    Ready to see loyalty <span class="grad-text">differently?</span>
+  </h2>
+  <p class="mt-4 text-slate-400 max-w-xl mx-auto">
+    Get a walkthrough of the dashboard, the AI layer, and how fast you can get a program live.
+  </p>
+  <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+    <a href="mailto:hello@perkwise.io" class="btn-primary text-white font-semibold px-8 py-3 rounded-lg hover:opacity-90 transition">Talk to us</a>
+    <a href="#" class="text-slate-200 font-semibold px-8 py-3 rounded-lg border border-white/15 hover:bg-white/5 transition">View the dashboard demo</a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="border-t border-white/5">
+  <div class="max-w-7xl mx-auto px-6 py-12 flex flex-col md:flex-row items-center justify-between gap-6">
+    <div class="flex items-center gap-2">
+      <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-plum to-mint flex items-center justify-center font-extrabold text-ink text-sm">P</div>
+      <span class="font-bold text-white">Perkwise</span>
+      <span class="text-slate-600 text-sm ml-2">© 2026 Perkwise, Inc.</span>
+    </div>
+    <div class="flex items-center gap-6 text-sm text-slate-500">
+      <a href="#product" class="hover:text-white transition">Product</a>
+      <a href="#ai" class="hover:text-white transition">AI Layer</a>
+      <a href="#how" class="hover:text-white transition">How it works</a>
+      <a href="mailto:hello@perkwise.io" class="hover:text-white transition">Contact</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
