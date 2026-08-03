@@ -40,6 +40,22 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+# Deliberate column renames across releases go here as (table, old, new).
+# Applied via ALTER TABLE ... RENAME COLUMN -- unlike the generic
+# add-missing-columns sweep, a straight rename preserves existing data
+# and the original NOT NULL constraint in one atomic statement, and
+# critically avoids `_sync_missing_columns` instead treating the new
+# name as a brand-new column and trying to ADD COLUMN ... NOT NULL on a
+# table that already has rows (which Postgres rejects without a server
+# default -- would have taken the whole app down on next deploy).
+# Currency rebrand (UK localisation): amount_usd -> amount_gbp is a pure
+# relabel of the same numbers, not a unit conversion, so a rename (not a
+# backfill) is correct here.
+_COLUMN_RENAMES: list[tuple[str, str, str]] = [
+    ("transactions", "amount_usd", "amount_gbp"),
+]
+
+
 def init_db() -> None:
     """Create all (missing) tables -- non-destructive, only adds tables that
     don't already exist. Fine for MVP/SQLite and for the clean-cutover
@@ -58,12 +74,43 @@ def init_db() -> None:
     for each mapped table that already exists, diff its live columns
     against the ORM model and ALTER TABLE ADD COLUMN any that are
     missing. Still not a substitute for real migrations if columns are
-    ever renamed/dropped/retyped, but it closes exactly this failure
-    mode for straightforward additive column changes."""
+    ever renamed/dropped/retyped -- for renames specifically, see
+    `_apply_column_renames`, which must run first so a rename isn't
+    mistaken for an addition."""
     from app.db import models  # noqa: F401  (ensure models are registered)
 
     Base.metadata.create_all(bind=engine)
+    _apply_column_renames()
     _sync_missing_columns()
+
+
+def _apply_column_renames() -> None:
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+
+    to_rename = []  # list[tuple[str, str, str]]
+    for table_name, old_name, new_name in _COLUMN_RENAMES:
+        if table_name not in existing_tables:
+            continue
+        existing_columns = {col["name"] for col in inspector.get_columns(table_name)}
+        if old_name in existing_columns and new_name not in existing_columns:
+            to_rename.append((table_name, old_name, new_name))
+
+    if not to_rename:
+        return
+
+    with engine.begin() as conn:
+        for table_name, old_name, new_name in to_rename:
+            logger.warning(
+                "Schema rename: %s.%s -> %s.%s",
+                table_name,
+                old_name,
+                table_name,
+                new_name,
+            )
+            conn.exec_driver_sql(
+                f"ALTER TABLE {table_name} RENAME COLUMN {old_name} TO {new_name}"
+            )
 
 
 def _sync_missing_columns() -> None:
