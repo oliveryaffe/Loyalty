@@ -1,10 +1,14 @@
 """SQLAlchemy engine/session/declarative-base setup."""
+import logging
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.schema import CreateColumn
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 # `timeout`: on SQLite, concurrent writers (e.g. two simultaneous redemption
 # requests hitting the atomic UPDATE in app/services/ledger.py) block on
@@ -42,7 +46,55 @@ def init_db() -> None:
     assumption Postgres is brought up under (Batch 1); a real deployment
     with evolving schema requirements would eventually move to Alembic
     migrations instead (explicitly deferred, not forgotten -- see
-    PLAN_BATCH1.md Feature 1)."""
+    PLAN_BATCH1.md Feature 1).
+
+    `create_all` alone only handles brand-new tables -- it silently does
+    NOT add new columns to a table that already exists on disk. That gap
+    bit us for real: Batch 2 added `product_category`/`product_name` to
+    `transactions`, but the already-provisioned production Postgres
+    volume kept the old schema, so every `/members` request 500'd with
+    `UndefinedColumn` and the dashboard went blank right after login.
+    `_sync_missing_columns` below is a minimal, idempotent stopgap --
+    for each mapped table that already exists, diff its live columns
+    against the ORM model and ALTER TABLE ADD COLUMN any that are
+    missing. Still not a substitute for real migrations if columns are
+    ever renamed/dropped/retyped, but it closes exactly this failure
+    mode for straightforward additive column changes."""
     from app.db import models  # noqa: F401  (ensure models are registered)
 
     Base.metadata.create_all(bind=engine)
+    _sync_missing_columns()
+
+
+def _sync_missing_columns() -> None:
+    # Compute the full diff (existing tables/columns vs. the ORM model)
+    # using a read-only Inspector pass *before* opening any write
+    # transaction. Interleaving inspector.get_columns() reads with an
+    # open engine.begin() write transaction on the same engine was
+    # observed to make SQLite misreport already-added columns as
+    # missing on a second pass (duplicate-column errors) -- doing all
+    # reads first, then all writes, avoids that entirely.
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+
+    to_add = []  # list[tuple[str, Column]]
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            continue  # create_all just made it fresh -- already in sync
+        existing_columns = {col["name"] for col in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name not in existing_columns:
+                to_add.append((table.name, column))
+
+    if not to_add:
+        return
+
+    with engine.begin() as conn:
+        for table_name, column in to_add:
+            ddl = f"ALTER TABLE {table_name} ADD COLUMN {CreateColumn(column).compile(engine)}"
+            logger.warning(
+                "Schema drift detected: adding missing column %s.%s",
+                table_name,
+                column.name,
+            )
+            conn.exec_driver_sql(ddl)
