@@ -25,7 +25,7 @@ from faker import Faker
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.db.base import Base, SessionLocal, engine  # noqa: E402
+from app.db.base import Base, SessionLocal, engine, init_db  # noqa: E402
 from app.db.models import (  # noqa: E402
     Member,
     Merchant,
@@ -258,7 +258,12 @@ def seed(reset: bool = True) -> None:
         print("Resetting database (drop_all + create_all)...")
         reset_db()
     else:
-        Base.metadata.create_all(bind=engine)
+        # --no-reset: adding to a DB that may already exist with an older
+        # schema -- use init_db() (create_all + column-rename/sync), not a
+        # bare create_all, for the same reason seed_if_empty() does (see
+        # its docstring): create_all alone never adds columns to a table
+        # that already exists on disk.
+        init_db()
 
     db = SessionLocal()
     now = utc_now()
@@ -422,8 +427,22 @@ def seed_if_empty() -> None:
     already has data -- this is what makes redeploys/restarts against a
     persistent Postgres volume safe (they no longer wipe real data), while
     still auto-seeding on a genuinely fresh/empty database.
+
+    Uses `init_db()` (create_all + `_apply_column_renames` +
+    `_sync_missing_columns`), NOT a bare `Base.metadata.create_all` --
+    this script runs as a separate process *before* uvicorn/app startup
+    in the Dockerfile's CMD (`seed_data.py --seed-if-empty && uvicorn
+    ...`), so it's the only thing that touches the DB before the
+    `db.query(Merchant).first()` below runs. A bare create_all only
+    creates missing tables, it does NOT add new columns to a table that
+    already exists on disk -- calling it here directly (as this
+    function used to) crashed Batch 3's very first production deploy
+    with `UndefinedColumn: merchants.stripe_customer_id does not
+    exist`, because the schema-sync that would have added that column
+    lives in `init_db()`, which only ever ran later, inside the FastAPI
+    startup event -- too late for this script's own query.
     """
-    Base.metadata.create_all(bind=engine)
+    init_db()
     db = SessionLocal()
     try:
         existing = db.query(Merchant).first()
