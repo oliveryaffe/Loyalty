@@ -197,7 +197,7 @@ columns case-insensitive/order-independent:
 | `customer_email` | yes | Matched against `Member.email`; auto-creates a new `Member` if not found |
 | `customer_first_name` / `customer_last_name` | no | Only used when creating a new member; default `"Unknown"`/`"Customer"` |
 | `transaction_date` | yes | ISO 8601 (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`) |
-| `amount_usd` | yes | `0 < amount_usd <= max_transaction_amount_usd` |
+| `amount_gbp` | yes | `0 < amount_gbp <= max_transaction_amount_gbp` |
 | `product_category` | no | Free text, max 60 chars |
 | `product_name` | no | Free text, max 150 chars |
 | `channel` | no | `pos` / `online` / `mobile`, defaults to `pos` |
@@ -431,10 +431,10 @@ follow-up pass:
   100 points and a 100-point reward, and asserts exactly 1 succeeds, 9 are
   rejected with 4xx, and the final balance is exactly 0.
 - **MAJOR — no upper bound on transaction amount.** `TransactionCreate`
-  (`backend/app/schemas/transaction.py`) only enforced `amount_usd > 0`,
+  (`backend/app/schemas/transaction.py`) only enforced `amount_gbp > 0`,
   so a single call could mint an arbitrary number of points. Added a
-  documented ceiling, `Settings.max_transaction_amount_usd` (default
-  $50,000, `backend/app/config.py`), enforced via `Field(le=...)` on the
+  documented ceiling, `Settings.max_transaction_amount_gbp` (default
+  £50,000, `backend/app/config.py`), enforced via `Field(le=...)` on the
   schema. Covered by
   `test_transaction_amount_over_max_is_rejected`/`test_transaction_amount_at_max_is_accepted`
   in `backend/tests/test_transactions.py`.

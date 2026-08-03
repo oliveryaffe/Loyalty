@@ -9,13 +9,13 @@ class TransactionCreate(BaseModel):
     """Ingest an earn event (e.g. from a POS/e-commerce purchase webhook)."""
 
     member_id: str
-    amount_usd: float = Field(
+    amount_gbp: float = Field(
         gt=0,
-        le=settings.max_transaction_amount_usd,
+        le=settings.max_transaction_amount_gbp,
         description=(
-            "Purchase amount in USD. Must be positive and no greater than "
-            f"{settings.max_transaction_amount_usd:,.0f} (see "
-            "Settings.max_transaction_amount_usd) to guard against a single "
+            "Purchase amount in GBP. Must be positive and no greater than "
+            f"{settings.max_transaction_amount_gbp:,.0f} (see "
+            "Settings.max_transaction_amount_gbp) to guard against a single "
             "call minting an unbounded number of points."
         ),
     )
@@ -26,7 +26,7 @@ class TransactionOut(BaseModel):
     id: str
     member_id: str
     type: str
-    amount_usd: float
+    amount_gbp: float
     points: int
     channel: str
     created_at: datetime

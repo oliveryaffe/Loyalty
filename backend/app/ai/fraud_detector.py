@@ -3,7 +3,7 @@
 Two simple, explainable statistical rules -- deliberately not a black-box
 model, so alerts are actionable for a merchant admin:
 
-1. **Abnormal amount** (z-score): a transaction's $ amount is a strong
+1. **Abnormal amount** (z-score): a transaction's £ amount is a strong
    outlier relative to that member's own transaction history (falls back to
    the whole-population distribution for members with too little history).
 2. **Abnormal velocity**: a member racks up an unusually large number of
@@ -47,7 +47,7 @@ def _transactions_to_frame(transactions: list[Transaction]) -> pd.DataFrame:
             {
                 "id": t.id,
                 "member_id": t.member_id,
-                "amount_usd": t.amount_usd,
+                "amount_gbp": t.amount_gbp,
                 "created_at": created_at,
                 "type": t.type,
             }
@@ -63,19 +63,19 @@ def _amount_zscore_findings(df: pd.DataFrame, threshold: float) -> dict[str, Fra
     if df.empty:
         return findings
 
-    global_mean = df["amount_usd"].mean()
-    global_std = df["amount_usd"].std(ddof=0) or 1.0
+    global_mean = df["amount_gbp"].mean()
+    global_std = df["amount_gbp"].std(ddof=0) or 1.0
 
     for member_id, group in df.groupby("member_id"):
         if len(group) >= MIN_TXNS_FOR_MEMBER_STATS:
-            mean = group["amount_usd"].mean()
-            std = group["amount_usd"].std(ddof=0)
+            mean = group["amount_gbp"].mean()
+            std = group["amount_gbp"].std(ddof=0)
             if not std or std < 1e-6:
                 std = global_std
         else:
             mean, std = global_mean, global_std
 
-        z = (group["amount_usd"] - mean) / std
+        z = (group["amount_gbp"] - mean) / std
         outliers = group[z.abs() >= threshold]
         for idx, row in outliers.iterrows():
             zscore = float(z.loc[idx])
@@ -85,8 +85,8 @@ def _amount_zscore_findings(df: pd.DataFrame, threshold: float) -> dict[str, Fra
                 reason="abnormal_amount",
                 score=round(abs(zscore), 2),
                 details=(
-                    f"amount=${row['amount_usd']:.2f} is {abs(zscore):.1f} std-devs from "
-                    f"member's typical ${mean:.2f} (n={len(group)})"
+                    f"amount=£{row['amount_gbp']:.2f} is {abs(zscore):.1f} std-devs from "
+                    f"member's typical £{mean:.2f} (n={len(group)})"
                 ),
             )
     return findings

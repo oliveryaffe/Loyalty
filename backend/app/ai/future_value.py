@@ -131,7 +131,7 @@ def _rfm_as_of(member: Member, as_of: datetime) -> tuple[float, int, float]:
         if t.type == TransactionType.EARN.value and window_start <= _aware(t.created_at) <= as_of
     ]
     frequency = len(earn_in_window)
-    monetary = sum(t.amount_usd for t in earn_in_window)
+    monetary = sum(t.amount_gbp for t in earn_in_window)
     return recency_days, frequency, monetary
 
 
@@ -163,7 +163,7 @@ def _has_pre_cutoff_activity(member: Member, cutoff: datetime) -> bool:
 
 def _future_spend_label(member: Member, cutoff: datetime, holdout_end: datetime) -> float:
     return sum(
-        t.amount_usd
+        t.amount_gbp
         for t in member.transactions
         if t.type == TransactionType.EARN.value and cutoff <= _aware(t.created_at) <= holdout_end
     )

@@ -16,7 +16,7 @@ def _mk_txn(id_, member_id, amount, created_at, type_=TransactionType.EARN.value
         id=id_,
         member_id=member_id,
         type=type_,
-        amount_usd=amount,
+        amount_gbp=amount,
         points=int(amount),
         created_at=created_at,
     )

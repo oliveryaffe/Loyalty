@@ -127,7 +127,7 @@ def test_too_few_eligible_members_falls_back_to_heuristic_for_everyone(db_sessio
             Transaction(
                 member_id=m.id,
                 type=TransactionType.EARN.value,
-                amount_usd=25.0,
+                amount_gbp=25.0,
                 points=25,
                 created_at=cutoff - timedelta(days=5),
             )
@@ -166,7 +166,7 @@ def test_brand_new_member_with_no_pre_cutoff_activity_falls_back_to_heuristic_ev
         Transaction(
             member_id=brand_new.id,
             type=TransactionType.EARN.value,
-            amount_usd=15.0,
+            amount_gbp=15.0,
             points=15,
             created_at=now - timedelta(days=1),
         )
@@ -200,7 +200,7 @@ def test_compute_future_value_features_is_bounded_by_as_of(db_session, merchant)
         Transaction(
             member_id=member.id,
             type=TransactionType.EARN.value,
-            amount_usd=30.0,
+            amount_gbp=30.0,
             points=30,
             created_at=cutoff - timedelta(days=10),
         )
@@ -209,7 +209,7 @@ def test_compute_future_value_features_is_bounded_by_as_of(db_session, merchant)
         Transaction(
             member_id=member.id,
             type=TransactionType.EARN.value,
-            amount_usd=9000.0,
+            amount_gbp=9000.0,
             points=9000,
             created_at=cutoff + timedelta(days=5),
         )

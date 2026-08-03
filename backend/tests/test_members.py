@@ -60,7 +60,7 @@ def test_member_earns_points_via_transaction_endpoint(client, auth_headers):
 
     txn_resp = client.post(
         "/api/v1/transactions",
-        json={"member_id": member_id, "amount_usd": 37.0, "channel": "pos"},
+        json={"member_id": member_id, "amount_gbp": 37.0, "channel": "pos"},
         headers=auth_headers,
     )
     assert txn_resp.status_code == 201

@@ -9,6 +9,7 @@ import {
   MemberWithChurn,
   TransactionOut,
 } from "../api/client";
+import { formatGBP } from "../utils";
 
 export default function Dashboard() {
   const [members, setMembers] = useState<MemberWithChurn[] | null>(null);
@@ -93,7 +94,7 @@ export default function Dashboard() {
                       <tr key={t.id}>
                         <td>{t.member_id.slice(0, 8)}</td>
                         <td>{t.type}</td>
-                        <td>${t.amount_usd.toFixed(2)}</td>
+                        <td>{formatGBP(t.amount_gbp)}</td>
                         <td>{t.points > 0 ? `+${t.points}` : t.points}</td>
                         <td>{t.channel}</td>
                       </tr>

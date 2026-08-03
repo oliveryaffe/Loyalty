@@ -103,7 +103,7 @@ def test_uploaded_product_data_flips_granularity_to_product(db_session, merchant
     _seed_baseline_category_signal(db_session, merchant)
 
     csv_body = (
-        "customer_email,customer_first_name,customer_last_name,transaction_date,amount_usd,"
+        "customer_email,customer_first_name,customer_last_name,transaction_date,amount_gbp,"
         "product_category,product_name,channel,external_order_id\n"
         "u0@example.com,U0,Test,2026-05-01,10.00,beverage,Cold Brew 16oz,pos,ORD-NBP-1\n"
         "u0@example.com,U0,Test,2026-05-02,12.00,beverage,Cold Brew 16oz,pos,ORD-NBP-2\n"
@@ -134,7 +134,7 @@ def test_uploaded_product_data_flips_granularity_to_product(db_session, merchant
 def test_representative_product_is_most_purchased_in_category(db_session, merchant):
     _seed_baseline_category_signal(db_session, merchant)
     csv_body = (
-        "customer_email,customer_first_name,customer_last_name,transaction_date,amount_usd,"
+        "customer_email,customer_first_name,customer_last_name,transaction_date,amount_gbp,"
         "product_category,product_name,channel,external_order_id\n"
         "u0@example.com,U0,Test,2026-05-01,10.00,beverage,Cold Brew 16oz,pos,ORD-A\n"
         "u1@example.com,U1,Test,2026-05-01,10.00,beverage,Cold Brew 16oz,pos,ORD-B\n"

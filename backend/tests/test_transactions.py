@@ -40,7 +40,7 @@ def reward_id(client, auth_headers):
 def test_negative_or_zero_amount_rejected(client, auth_headers, member_id):
     resp = client.post(
         "/api/v1/transactions",
-        json={"member_id": member_id, "amount_usd": -5},
+        json={"member_id": member_id, "amount_gbp": -5},
         headers=auth_headers,
     )
     assert resp.status_code == 422
@@ -49,7 +49,7 @@ def test_negative_or_zero_amount_rejected(client, auth_headers, member_id):
 def test_transaction_amount_over_max_is_rejected(client, auth_headers, member_id):
     resp = client.post(
         "/api/v1/transactions",
-        json={"member_id": member_id, "amount_usd": settings.max_transaction_amount_usd + 0.01},
+        json={"member_id": member_id, "amount_gbp": settings.max_transaction_amount_gbp + 0.01},
         headers=auth_headers,
     )
     assert resp.status_code == 422
@@ -61,7 +61,7 @@ def test_transaction_amount_over_max_is_rejected(client, auth_headers, member_id
 def test_transaction_amount_at_max_is_accepted(client, auth_headers, member_id):
     resp = client.post(
         "/api/v1/transactions",
-        json={"member_id": member_id, "amount_usd": settings.max_transaction_amount_usd},
+        json={"member_id": member_id, "amount_gbp": settings.max_transaction_amount_gbp},
         headers=auth_headers,
     )
     assert resp.status_code == 201
@@ -70,7 +70,7 @@ def test_transaction_amount_at_max_is_accepted(client, auth_headers, member_id):
 def test_transaction_for_unknown_member_404s(client, auth_headers):
     resp = client.post(
         "/api/v1/transactions",
-        json={"member_id": "does-not-exist", "amount_usd": 10},
+        json={"member_id": "does-not-exist", "amount_gbp": 10},
         headers=auth_headers,
     )
     assert resp.status_code == 404
@@ -79,7 +79,7 @@ def test_transaction_for_unknown_member_404s(client, auth_headers):
 def test_redeem_reward_member_can_afford(client, auth_headers, member_id, reward_id):
     client.post(
         "/api/v1/transactions",
-        json={"member_id": member_id, "amount_usd": 150},
+        json={"member_id": member_id, "amount_gbp": 150},
         headers=auth_headers,
     )
     resp = client.post(
@@ -111,10 +111,10 @@ def test_redeem_reward_rejected_when_balance_insufficient(client, auth_headers, 
 
 def test_list_transactions_for_member(client, auth_headers, member_id):
     client.post(
-        "/api/v1/transactions", json={"member_id": member_id, "amount_usd": 10}, headers=auth_headers
+        "/api/v1/transactions", json={"member_id": member_id, "amount_gbp": 10}, headers=auth_headers
     )
     client.post(
-        "/api/v1/transactions", json={"member_id": member_id, "amount_usd": 20}, headers=auth_headers
+        "/api/v1/transactions", json={"member_id": member_id, "amount_gbp": 20}, headers=auth_headers
     )
     resp = client.get(f"/api/v1/transactions?member_id={member_id}", headers=auth_headers)
     assert resp.status_code == 200

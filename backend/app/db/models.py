@@ -154,7 +154,7 @@ class Transaction(Base):
     member_id: Mapped[str] = mapped_column(ForeignKey("members.id"), nullable=False, index=True)
 
     type: Mapped[str] = mapped_column(String(20), nullable=False)
-    amount_usd: Mapped[float] = mapped_column(Float, default=0.0)  # purchase $ amount (earn only)
+    amount_gbp: Mapped[float] = mapped_column(Float, default=0.0)  # purchase £ amount (earn only)
     points: Mapped[int] = mapped_column(Integer, nullable=False)  # signed: + earn, - redeem
     channel: Mapped[str] = mapped_column(String(30), default="pos")  # pos, online, mobile
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)

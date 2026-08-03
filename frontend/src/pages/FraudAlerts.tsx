@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 
 import { FraudAlertOut, getFraudAlerts } from "../api/client";
+import { formatDateTimeUK } from "../utils";
 
 export default function FraudAlerts() {
   const [alerts, setAlerts] = useState<FraudAlertOut[] | null>(null);
@@ -77,7 +78,7 @@ export default function FraudAlerts() {
                   </span>
                 </td>
                 <td>{a.resolved ? "Resolved" : "Open"}</td>
-                <td>{new Date(a.created_at).toLocaleString()}</td>
+                <td>{formatDateTimeUK(a.created_at)}</td>
               </tr>
             ))}
           </tbody>

@@ -1,4 +1,4 @@
-customer_email,customer_first_name,customer_last_name,transaction_date,amount_usd,product_category,product_name,channel,external_order_id
+customer_email,customer_first_name,customer_last_name,transaction_date,amount_gbp,product_category,product_name,channel,external_order_id
 blairamanda@example.com,Melanie,Munoz,2026-05-20T06:00:00,3.95,bakery,Blueberry Muffin,online,CSV-DEMO-0006
 john21@example.net,Danielle,Johnson,2026-05-21T14:00:00,25.21,merchandise,Travel Tumbler,pos,CSV-DEMO-0031
 blairamanda@example.com,Melanie,Munoz,2026-05-21T20:00:00,5.70,beverage,Cold Brew 16oz,mobile,CSV-DEMO-0036

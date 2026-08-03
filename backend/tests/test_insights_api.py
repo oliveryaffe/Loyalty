@@ -12,7 +12,7 @@ import pytest
 from app.config import settings
 
 SAMPLE_CSV = (
-    "customer_email,customer_first_name,customer_last_name,transaction_date,amount_usd,"
+    "customer_email,customer_first_name,customer_last_name,transaction_date,amount_gbp,"
     "product_category,product_name,channel,external_order_id\n"
     "csv1@example.com,Csv,One,2026-05-01,25.00,beverage,Cold Brew 16oz,pos,API-ORD-1\n"
     "csv2@example.com,Csv,Two,2026-05-02,18.50,bakery,Muffin,pos,API-ORD-2\n"
@@ -22,7 +22,7 @@ SAMPLE_CSV = (
 BAD_HEADER_CSV = "customer_email,transaction_date\ncsv1@example.com,2026-05-01\n"
 
 MALFORMED_ROWS_CSV = (
-    "customer_email,transaction_date,amount_usd\n"
+    "customer_email,transaction_date,amount_gbp\n"
     + "".join(f"good{i}@example.com,2026-05-0{(i % 9) + 1},10.00\n" for i in range(1, 11))
     + "bad1@example.com,not-a-date,10.00\n"
     + "bad2@example.com,2026-05-01,not-a-number\n"
@@ -117,7 +117,7 @@ def test_upload_default_mint_points_false_leaves_balance_unchanged(client, auth_
     before = client.get(f"/api/v1/members/{member_id}", headers=auth_headers).json()["points_balance"]
 
     body = (
-        "customer_email,transaction_date,amount_usd,external_order_id\n"
+        "customer_email,transaction_date,amount_gbp,external_order_id\n"
         "marie@example.com,2026-05-01,75.00,BACKFILL-ORD-1\n"
     ).encode()
     resp = _upload(client, auth_headers, body)
@@ -132,7 +132,7 @@ def test_upload_mint_points_true_increases_balance(client, auth_headers, member_
     before = client.get(f"/api/v1/members/{member_id}", headers=auth_headers).json()["points_balance"]
 
     body = (
-        "customer_email,transaction_date,amount_usd,external_order_id\n"
+        "customer_email,transaction_date,amount_gbp,external_order_id\n"
         "marie@example.com,2026-05-01,75.00,MINT-ORD-1\n"
     ).encode()
     resp = _upload(client, auth_headers, body, mint_points=True)
@@ -140,7 +140,7 @@ def test_upload_mint_points_true_increases_balance(client, auth_headers, member_
     assert resp.json()["rows_ingested"] == 1
 
     after = client.get(f"/api/v1/members/{member_id}", headers=auth_headers).json()["points_balance"]
-    assert after == before + 75  # 1:1 points_per_dollar, floored
+    assert after == before + 75  # 1:1 points_per_pound, floored
 
 
 def test_reuploading_same_file_is_idempotent(client, auth_headers):
@@ -234,7 +234,7 @@ def test_next_best_product_flips_to_product_granularity_after_upload(client, aut
     )
     reward_id = resp.json()["id"]
     client.post(
-        "/api/v1/transactions", json={"member_id": member_id, "amount_usd": 100}, headers=auth_headers
+        "/api/v1/transactions", json={"member_id": member_id, "amount_gbp": 100}, headers=auth_headers
     )
     client.post(
         "/api/v1/rewards/redeem",
@@ -248,7 +248,7 @@ def test_next_best_product_flips_to_product_granularity_after_upload(client, aut
         assert r["product_name"] is None
 
     body = (
-        "customer_email,transaction_date,amount_usd,product_category,product_name,external_order_id\n"
+        "customer_email,transaction_date,amount_gbp,product_category,product_name,external_order_id\n"
         "marie@example.com,2026-05-01,15.00,merchandise,Ceramic Mug,NBP-ORD-1\n"
         "marie@example.com,2026-05-02,15.00,merchandise,Ceramic Mug,NBP-ORD-2\n"
     ).encode()

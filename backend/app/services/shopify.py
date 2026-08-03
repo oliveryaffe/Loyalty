@@ -90,8 +90,8 @@ def ingest_shopify_order(
         db.add(member)
         db.flush()
 
-    amount_usd = float(payload.total_price)
-    txn = earn_points(db, member, amount_usd, channel="shopify")
+    amount_gbp = float(payload.total_price)
+    txn = earn_points(db, member, amount_gbp, channel="shopify")
     txn.external_order_id = external_order_id
     txn.source = "shopify"
 

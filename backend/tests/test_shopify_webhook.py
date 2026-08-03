@@ -59,9 +59,9 @@ def test_valid_hmac_creates_transaction_and_credits_member(client, db_session, m
     assert body["type"] == "earn"
 
     fixture = _fixture_dict()
-    expected_points = floor(float(fixture["total_price"]) * settings.points_per_dollar)
+    expected_points = floor(float(fixture["total_price"]) * settings.points_per_pound)
     assert body["points"] == expected_points
-    assert body["amount_usd"] == float(fixture["total_price"])
+    assert body["amount_gbp"] == float(fixture["total_price"])
 
     txn = db_session.query(Transaction).filter(Transaction.id == body["id"]).first()
     assert txn is not None

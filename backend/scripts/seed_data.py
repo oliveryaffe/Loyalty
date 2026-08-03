@@ -49,10 +49,10 @@ DEMO_SHOPIFY_SHOP_DOMAIN = "northwind-coffee-demo.myshopify.com"
 
 REWARD_CATALOG = [
     # (name, category, points_cost, tier_required)
-    ("$5 Store Credit", "gift-card", 500, "bronze"),
-    ("$10 Store Credit", "gift-card", 1000, "bronze"),
-    ("$25 Store Credit", "gift-card", 2500, "silver"),
-    ("$50 Store Credit", "gift-card", 5000, "gold"),
+    ("£5 Store Credit", "gift-card", 500, "bronze"),
+    ("£10 Store Credit", "gift-card", 1000, "bronze"),
+    ("£25 Store Credit", "gift-card", 2500, "silver"),
+    ("£50 Store Credit", "gift-card", 5000, "gold"),
     ("Free Coffee", "beverage", 150, "bronze"),
     ("Free Pastry", "beverage", 250, "bronze"),
     ("Branded Tote Bag", "apparel", 800, "bronze"),
@@ -65,7 +65,7 @@ REWARD_CATALOG = [
     ("Private Shopping Session", "experience", 6000, "gold"),
     ("Birthday Bonus Points", "bonus", 0, "bronze"),
     ("Double Points Weekend Pass", "bonus", 1500, "silver"),
-    ("$100 Store Credit", "gift-card", 10000, "platinum"),
+    ("£100 Store Credit", "gift-card", 10000, "platinum"),
     ("Free Shipping (1 Year)", "perk", 3000, "silver"),
 ]
 
@@ -191,11 +191,11 @@ def generate_earn_transactions(
         offset_days = rng.uniform(0, span_days)
         created_at = latest - timedelta(days=offset_days, hours=rng.uniform(0, 23))
         amount = round(rng.uniform(min_amt, max_amt), 2)
-        points = int(amount)  # 1:1 points_per_dollar, floored
+        points = int(amount)  # 1:1 points_per_pound, floored
         txn = Transaction(
             member_id=member.id,
             type=TransactionType.EARN.value,
-            amount_usd=amount,
+            amount_gbp=amount,
             points=points,
             channel=rng.choice(["pos", "online", "mobile"]),
             created_at=created_at,
@@ -216,7 +216,7 @@ def inject_amount_spike_fraud(member: Member, rng: random.Random, now: datetime)
     return Transaction(
         member_id=member.id,
         type=TransactionType.EARN.value,
-        amount_usd=amount,
+        amount_gbp=amount,
         points=points,
         channel="online",
         created_at=created_at,
@@ -238,7 +238,7 @@ def inject_velocity_burst_fraud(member: Member, rng: random.Random, now: datetim
             Transaction(
                 member_id=member.id,
                 type=TransactionType.EARN.value,
-                amount_usd=amount,
+                amount_gbp=amount,
                 points=points,
                 channel="online",
                 created_at=created_at,
@@ -357,7 +357,7 @@ def seed(reset: bool = True) -> None:
             redemption_txn = Transaction(
                 member_id=member.id,
                 type=TransactionType.REDEEM.value,
-                amount_usd=0.0,
+                amount_gbp=0.0,
                 points=-reward.points_cost,
                 channel="redemption",
                 created_at=now - timedelta(days=rng.randint(0, 60)),

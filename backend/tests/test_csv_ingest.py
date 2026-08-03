@@ -12,7 +12,7 @@ import pytest
 from app.db.models import Member, Merchant, Transaction, TransactionType
 from app.services.csv_ingest import CsvUploadError, parse_and_ingest_csv
 
-HEADER = "customer_email,customer_first_name,customer_last_name,transaction_date,amount_usd,product_category,product_name,channel,external_order_id"
+HEADER = "customer_email,customer_first_name,customer_last_name,transaction_date,amount_gbp,product_category,product_name,channel,external_order_id"
 
 
 @pytest.fixture()
@@ -88,7 +88,7 @@ def test_malformed_rows_are_skipped_and_reported_with_correct_row_numbers(db_ses
 
 
 def test_missing_required_header_rejects_whole_file(db_session, merchant):
-    body = b"customer_email,transaction_date\nfoo@example.com,2026-05-01"  # missing amount_usd
+    body = b"customer_email,transaction_date\nfoo@example.com,2026-05-01"  # missing amount_gbp
     with pytest.raises(CsvUploadError):
         parse_and_ingest_csv(db_session, merchant, body, mint_points=False)
     assert db_session.query(Transaction).count() == 0
@@ -143,7 +143,7 @@ def test_mint_points_true_credits_real_balance(db_session, merchant, existing_me
 
     assert result.rows_ingested == 1
     db_session.refresh(existing_member)
-    assert existing_member.points_balance == balance_before + 50  # 1:1 points_per_dollar, floored
+    assert existing_member.points_balance == balance_before + 50  # 1:1 points_per_pound, floored
 
 
 def test_reuploading_same_file_is_idempotent_via_external_order_id(db_session, merchant):

@@ -45,7 +45,7 @@ def test_points_for_purchase_is_floor_of_amount_times_rate():
 
 def test_earn_points_increases_balance(db_session, member):
     assert member.points_balance == 0
-    txn = earn_points(db_session, member, amount_usd=42.50, channel="pos")
+    txn = earn_points(db_session, member, amount_gbp=42.50, channel="pos")
     db_session.commit()
 
     assert txn.points == 42
@@ -54,9 +54,9 @@ def test_earn_points_increases_balance(db_session, member):
 
 
 def test_earn_points_accumulates_across_multiple_transactions(db_session, member):
-    earn_points(db_session, member, amount_usd=10.0)
-    earn_points(db_session, member, amount_usd=25.0)
-    earn_points(db_session, member, amount_usd=3.30)
+    earn_points(db_session, member, amount_gbp=10.0)
+    earn_points(db_session, member, amount_gbp=25.0)
+    earn_points(db_session, member, amount_gbp=3.30)
     db_session.commit()
 
     assert member.points_balance == 10 + 25 + 3
@@ -66,7 +66,7 @@ def test_earn_points_rejects_inactive_member(db_session, member):
     member.is_active = False
     db_session.flush()
     with pytest.raises(InactiveMemberError):
-        earn_points(db_session, member, amount_usd=10.0)
+        earn_points(db_session, member, amount_gbp=10.0)
 
 
 @pytest.fixture()
@@ -84,7 +84,7 @@ def reward(db_session, merchant):
 
 
 def test_redeem_reward_success_debits_balance(db_session, member, reward):
-    earn_points(db_session, member, amount_usd=150.0)
+    earn_points(db_session, member, amount_gbp=150.0)
     db_session.commit()
     assert member.points_balance == 150
 
@@ -99,7 +99,7 @@ def test_redeem_reward_success_debits_balance(db_session, member, reward):
 
 
 def test_redeem_reward_insufficient_balance_raises_and_does_not_debit(db_session, member, reward):
-    earn_points(db_session, member, amount_usd=10.0)  # only 10 points, need 100
+    earn_points(db_session, member, amount_gbp=10.0)  # only 10 points, need 100
     db_session.commit()
 
     with pytest.raises(InsufficientBalanceError):

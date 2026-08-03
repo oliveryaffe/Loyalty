@@ -92,7 +92,7 @@ def test_concurrent_redemptions_only_one_succeeds_and_balance_is_correct(live_se
         # Give the member exactly enough points for ONE redemption.
         earn_resp = c.post(
             "/api/v1/transactions",
-            json={"member_id": member_id, "amount_usd": 100},
+            json={"member_id": member_id, "amount_gbp": 100},
             headers=headers,
         )
         assert earn_resp.status_code == 201

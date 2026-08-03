@@ -43,14 +43,14 @@ class Settings(BaseSettings):
     ]
 
     # Points program defaults
-    points_per_dollar: float = 1.0
+    points_per_pound: float = 1.0
 
-    # Sanity ceiling on a single ingested transaction's dollar amount, to
+    # Sanity ceiling on a single ingested transaction's pound amount, to
     # guard against a fat-fingered or malicious ingestion call minting an
-    # unbounded number of points in one request. $50,000 comfortably covers
+    # unbounded number of points in one request. £50,000 comfortably covers
     # any plausible single-purchase loyalty event for this MVP's retail use
     # case; raise via env var if a merchant's use case genuinely needs more.
-    max_transaction_amount_usd: float = 50_000.0
+    max_transaction_amount_gbp: float = 50_000.0
 
     # Fraud detector tuning
     fraud_zscore_threshold: float = 3.0

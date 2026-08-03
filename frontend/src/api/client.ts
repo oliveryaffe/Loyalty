@@ -149,7 +149,7 @@ export interface TransactionOut {
   id: string;
   member_id: string;
   type: string;
-  amount_usd: number;
+  amount_gbp: number;
   points: number;
   channel: string;
   created_at: string;
@@ -157,7 +157,7 @@ export interface TransactionOut {
 
 export interface TransactionCreate {
   member_id: string;
-  amount_usd: number;
+  amount_gbp: number;
   channel?: string;
 }
 

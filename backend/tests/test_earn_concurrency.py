@@ -154,7 +154,7 @@ def test_concurrent_duplicate_order_id_webhooks_produce_exactly_one_transaction(
     )
     assert all(r.json() == {"status": "duplicate_ignored"} for r in duplicates)  # type: ignore[union-attr]
 
-    expected_points = floor(float(fixture["total_price"]) * settings.points_per_dollar)
+    expected_points = floor(float(fixture["total_price"]) * settings.points_per_pound)
 
     db = SessionLocal()
     try:
@@ -218,7 +218,7 @@ def test_concurrent_distinct_earns_for_same_member_never_lose_an_update(live_ser
         member_id = member_resp.json()["id"]
 
         n_requests = 20
-        amount_usd = 7  # -> 7 points per earn (points_per_dollar defaults to 1)
+        amount_gbp = 7  # -> 7 points per earn (points_per_pound defaults to 1)
         barrier = threading.Barrier(n_requests)
         results: list[httpx.Response | None] = [None] * n_requests
 
@@ -227,7 +227,7 @@ def test_concurrent_distinct_earns_for_same_member_never_lose_an_update(live_ser
                 barrier.wait()
                 results[i] = tc.post(
                     "/api/v1/transactions",
-                    json={"member_id": member_id, "amount_usd": amount_usd},
+                    json={"member_id": member_id, "amount_gbp": amount_gbp},
                     headers=headers,
                 )
 
@@ -243,7 +243,7 @@ def test_concurrent_distinct_earns_for_same_member_never_lose_an_update(live_ser
             f"expected all {n_requests} distinct earns to succeed: {status_codes}"
         )
 
-        expected_points_per_earn = floor(amount_usd * settings.points_per_dollar)
+        expected_points_per_earn = floor(amount_gbp * settings.points_per_pound)
         expected_total = expected_points_per_earn * n_requests
 
         final_balance = c.get(f"/api/v1/members/{member_id}", headers=headers).json()["points_balance"]

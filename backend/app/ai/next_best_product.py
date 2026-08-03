@@ -51,20 +51,20 @@ class NextBestResult:
 
 
 def build_affinity_matrix(db: Session, merchant_id: str) -> tuple[pd.DataFrame, Granularity]:
-    """member_id x category matrix, M[i][j] = total $ (or points, for the
+    """member_id x category matrix, M[i][j] = total £ (or points, for the
     redemption fallback) member i has engaged category j with. Returns
     (matrix, granularity) -- an empty DataFrame if this merchant has
     neither uploaded product data nor any completed redemptions yet."""
     product_rows = (
-        db.query(Transaction.member_id, Transaction.product_category, Transaction.amount_usd)
+        db.query(Transaction.member_id, Transaction.product_category, Transaction.amount_gbp)
         .join(Member, Transaction.member_id == Member.id)
         .filter(Member.merchant_id == merchant_id, Transaction.product_category.isnot(None))
         .all()
     )
     if product_rows:
-        df = pd.DataFrame(product_rows, columns=["member_id", "category", "amount_usd"])
+        df = pd.DataFrame(product_rows, columns=["member_id", "category", "amount_gbp"])
         matrix = df.pivot_table(
-            index="member_id", columns="category", values="amount_usd", aggfunc="sum", fill_value=0.0
+            index="member_id", columns="category", values="amount_gbp", aggfunc="sum", fill_value=0.0
         )
         return matrix, "product"
 
@@ -86,10 +86,10 @@ def build_affinity_matrix(db: Session, merchant_id: str) -> tuple[pd.DataFrame, 
 
 def _representative_product(db: Session, merchant_id: str, category: str) -> str | None:
     """Within `category`, the single most-purchased-by-similar-members
-    product (by total $ across this merchant's uploaded transactions) --
+    product (by total £ across this merchant's uploaded transactions) --
     only meaningful when granularity="product"."""
     row = (
-        db.query(Transaction.product_name, func.sum(Transaction.amount_usd).label("total"))
+        db.query(Transaction.product_name, func.sum(Transaction.amount_gbp).label("total"))
         .join(Member, Transaction.member_id == Member.id)
         .filter(
             Member.merchant_id == merchant_id,
@@ -97,7 +97,7 @@ def _representative_product(db: Session, merchant_id: str, category: str) -> str
             Transaction.product_name.isnot(None),
         )
         .group_by(Transaction.product_name)
-        .order_by(func.sum(Transaction.amount_usd).desc())
+        .order_by(func.sum(Transaction.amount_gbp).desc())
         .first()
     )
     return row[0] if row else None

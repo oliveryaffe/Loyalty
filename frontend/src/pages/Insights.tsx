@@ -10,6 +10,7 @@ import {
   NextBestOut,
   uploadInsightsCsv,
 } from "../api/client";
+import { formatGBP } from "../utils";
 
 type SortKey = "name" | "tier" | "predicted_future_value";
 
@@ -255,7 +256,7 @@ export default function Insights() {
                     {r.first_name} {r.last_name}
                   </td>
                   <td>{tierByMemberId[r.member_id] ?? "—"}</td>
-                  <td>${r.predicted_future_value.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  <td>{formatGBP(r.predicted_future_value)}</td>
                   <td>
                     <ModelBadge modelUsed={r.model_used} />
                   </td>

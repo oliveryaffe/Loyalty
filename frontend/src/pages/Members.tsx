@@ -7,6 +7,7 @@ import {
   RecommendationOut,
 } from "../api/client";
 import RiskBadge from "../components/RiskBadge";
+import { formatDateUK } from "../utils";
 
 type SortKey =
   | "name"
@@ -149,7 +150,7 @@ export default function Members() {
                 <td>{m.email}</td>
                 <td>{m.tier}</td>
                 <td>{m.points_balance.toLocaleString()}</td>
-                <td>{new Date(m.last_activity_at).toLocaleDateString()}</td>
+                <td>{formatDateUK(m.last_activity_at)}</td>
                 <td>
                   <RiskBadge band={m.churn_risk_band} />{" "}
                   {m.churn_risk_score !== null ? `${Math.round(m.churn_risk_score)}` : "-"}

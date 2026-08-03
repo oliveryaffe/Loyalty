@@ -24,7 +24,7 @@ from app.services.ledger import earn_points
 
 MAX_UPLOAD_ROWS = 20_000
 
-REQUIRED_HEADERS = {"customer_email", "transaction_date", "amount_usd"}
+REQUIRED_HEADERS = {"customer_email", "transaction_date", "amount_gbp"}
 ALLOWED_CHANNELS = {"pos", "online", "mobile"}
 MAX_CATEGORY_LEN = 60
 MAX_PRODUCT_NAME_LEN = 150
@@ -40,7 +40,7 @@ class CsvUploadError(ValueError):
 class _ParsedRow:
     email: str
     transaction_date: datetime
-    amount_usd: float
+    amount_gbp: float
     product_category: str | None
     product_name: str | None
     channel: str
@@ -83,7 +83,7 @@ def parse_and_ingest_csv(
 
     `mint_points=True` opts into calling the existing
     `app.services.ledger.earn_points()` per row instead (real balance
-    increase, same points-per-dollar math as every other earn path, and it
+    increase, same points-per-pound math as every other earn path, and it
     *does* advance `last_activity_at` via `occurred_at`) -- for the less
     common case of uploading genuinely new, not-yet-ledgered purchases.
 
@@ -177,24 +177,24 @@ def parse_and_ingest_csv(
             rows_failed += 1
             continue
 
-        amount_raw = _get(row, "amount_usd")
+        amount_raw = _get(row, "amount_gbp")
         if not amount_raw:
-            errors.append(InsightsUploadRowError(row=row_num, reason="missing amount_usd"))
+            errors.append(InsightsUploadRowError(row=row_num, reason="missing amount_gbp"))
             rows_failed += 1
             continue
         try:
-            amount_usd = float(amount_raw)
+            amount_gbp = float(amount_raw)
         except ValueError:
-            errors.append(InsightsUploadRowError(row=row_num, reason=f"non-numeric amount_usd: {amount_raw!r}"))
+            errors.append(InsightsUploadRowError(row=row_num, reason=f"non-numeric amount_gbp: {amount_raw!r}"))
             rows_failed += 1
             continue
-        if not (0 < amount_usd <= settings.max_transaction_amount_usd):
+        if not (0 < amount_gbp <= settings.max_transaction_amount_gbp):
             errors.append(
                 InsightsUploadRowError(
                     row=row_num,
                     reason=(
-                        f"amount_usd {amount_usd} out of range "
-                        f"(0, {settings.max_transaction_amount_usd}]"
+                        f"amount_gbp {amount_gbp} out of range "
+                        f"(0, {settings.max_transaction_amount_gbp}]"
                     ),
                 )
             )
@@ -245,7 +245,7 @@ def parse_and_ingest_csv(
         member_cache[email] = member
 
         if mint_points:
-            txn = earn_points(db, member, amount_usd, channel=channel, occurred_at=transaction_date)
+            txn = earn_points(db, member, amount_gbp, channel=channel, occurred_at=transaction_date)
         else:
             # Historical backfill: create the ledger row directly (NOT via
             # earn_points()) so points_balance/last_activity_at are left
@@ -255,7 +255,7 @@ def parse_and_ingest_csv(
             txn = Transaction(
                 member_id=member.id,
                 type=TransactionType.EARN.value,
-                amount_usd=amount_usd,
+                amount_gbp=amount_gbp,
                 points=0,
                 channel=channel,
                 created_at=transaction_date,

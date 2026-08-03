@@ -19,7 +19,7 @@ from app.db.models import Member, Transaction, TransactionType
 # Tuning constants -- see docstring above re: swappability.
 RECENCY_SATURATION_DAYS = 90.0  # inactivity at/beyond this = max recency risk
 FREQUENCY_SATURATION = 8.0  # earn-transactions in lookback window for zero freq risk
-MONETARY_SATURATION = 400.0  # $ spent in lookback window for zero monetary risk
+MONETARY_SATURATION = 400.0  # £ spent in lookback window for zero monetary risk
 LOOKBACK_DAYS = 120  # window used for frequency/monetary components
 
 WEIGHT_RECENCY = 0.5
@@ -92,7 +92,7 @@ def compute_rfm(db: Session, member: Member, now: datetime | None = None) -> tup
         >= window_start
     ]
     frequency = len(earn_txns)
-    monetary = sum(t.amount_usd for t in earn_txns)
+    monetary = sum(t.amount_gbp for t in earn_txns)
 
     return recency_days, frequency, monetary
 

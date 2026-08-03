@@ -51,18 +51,18 @@ class RewardUnavailableError(LedgerError):
     pass
 
 
-def points_for_purchase(amount_usd: float) -> int:
-    """Earn rule: $1 spent = `points_per_dollar` points (default 1:1),
+def points_for_purchase(amount_gbp: float) -> int:
+    """Earn rule: £1 spent = `points_per_pound` points (default 1:1),
     floored to the nearest whole point."""
-    if amount_usd < 0:
-        raise ValueError("amount_usd must be non-negative")
-    return floor(amount_usd * settings.points_per_dollar)
+    if amount_gbp < 0:
+        raise ValueError("amount_gbp must be non-negative")
+    return floor(amount_gbp * settings.points_per_pound)
 
 
 def earn_points(
     db: Session,
     member: Member,
-    amount_usd: float,
+    amount_gbp: float,
     channel: str = "pos",
     occurred_at: datetime | None = None,
 ) -> Transaction:
@@ -90,11 +90,11 @@ def earn_points(
     if not member.is_active:
         raise InactiveMemberError(f"Member {member.id} is not active")
 
-    points = points_for_purchase(amount_usd)
+    points = points_for_purchase(amount_gbp)
     txn = Transaction(
         member_id=member.id,
         type=TransactionType.EARN.value,
-        amount_usd=amount_usd,
+        amount_gbp=amount_gbp,
         points=points,
         channel=channel,
     )
@@ -185,7 +185,7 @@ def redeem_reward(
     txn = Transaction(
         member_id=member.id,
         type=TransactionType.REDEEM.value,
-        amount_usd=0.0,
+        amount_gbp=0.0,
         points=-reward.points_cost,
         channel="redemption",
     )

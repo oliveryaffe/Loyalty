@@ -27,7 +27,7 @@ def ingest_transaction(
         raise HTTPException(status_code=404, detail="Member not found")
 
     try:
-        txn = earn_points(db, member, payload.amount_usd, channel=payload.channel)
+        txn = earn_points(db, member, payload.amount_gbp, channel=payload.channel)
     except InactiveMemberError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
