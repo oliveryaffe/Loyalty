@@ -6,6 +6,7 @@ still use all pre-existing merchant-scoped endpoints" regression check.
 from jose import jwt
 
 from app.config import settings
+from app.db.models import Merchant
 from scripts.seed_data import DEMO_MERCHANT_EMAIL, DEMO_MERCHANT_PASSWORD, DEMO_TEAM_MEMBER_EMAIL, DEMO_TEAM_MEMBER_PASSWORD
 
 
@@ -169,6 +170,35 @@ def test_removing_or_demoting_an_admin_is_allowed_when_another_admin_remains(cli
 # ---------------------------------------------------------------------------
 # Cross-merchant isolation
 # ---------------------------------------------------------------------------
+
+
+def test_cancelled_merchant_gets_402_on_team_routes(client, db_session):
+    """TEST_REPORT_BATCH3.md §1 (MEDIUM): team.py was the one router in this
+    batch not gated by subscription status at all -- a cancelled/unpaid
+    merchant admin could invite/remove/role-update teammates indefinitely.
+    Now gated the same way as every other paid-tier router
+    (require_active_subscription for the list endpoint,
+    require_admin_active_subscription for the admin-only writes)."""
+    signup_body = _signup(client, "Acme Retail", "cancelled-admin@acme.example.com", "s3cret-pw1")
+    admin_token = _login(client, "cancelled-admin@acme.example.com", "s3cret-pw1")
+
+    merchant = db_session.get(Merchant, signup_body["merchant_id"])
+    merchant.subscription_status = "canceled"
+    db_session.commit()
+
+    invite_resp = _invite(client, admin_token, "blocked-teammate@acme.example.com")
+    assert invite_resp.status_code == 402
+
+    list_resp = client.get("/api/v1/team", headers=_headers(admin_token))
+    assert list_resp.status_code == 402
+
+    delete_resp = client.delete(f"/api/v1/team/{signup_body['id']}", headers=_headers(admin_token))
+    assert delete_resp.status_code == 402
+
+    role_resp = client.patch(
+        f"/api/v1/team/{signup_body['id']}/role", json={"role": "member"}, headers=_headers(admin_token)
+    )
+    assert role_resp.status_code == 402
 
 
 def test_cross_merchant_team_access_is_404_not_leaked(client):

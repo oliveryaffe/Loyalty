@@ -4,7 +4,27 @@ Signup creates a Merchant (pure business entity) plus its first TeamMember
 (role=admin) in the same transaction. Login authenticates a TeamMember by
 email; the JWT `sub` claim is the TeamMember id, with `merchant_id` and
 `role` carried as extra claims.
+
+This endpoint is deliberately NOT gated by `require_active_subscription`
+(PLAN_BATCH3.md §2) -- see app/api/deps.py's exemption list: a merchant
+must be able to log in to *reach* the lock screen / billing in the first
+place.
+
+Judgment call (flagged inline, not in the original plan text): a freshly
+signed-up Merchant here starts with `subscription_status="trialing"` and
+`trial_ends_at` TRIAL_PERIOD_DAYS (14) out, rather than `None`. This
+endpoint is Ledgerly's own direct account-creation path (no Stripe
+involved at all) -- if new signups started life hard-locked
+(`subscription_status=None` is a hard-lock value under
+`require_active_subscription`), nobody could ever use the product long
+enough to decide to subscribe via Stripe Checkout. Mirrors the same
+14-day/card-required-upfront trial the plan specifies for the Stripe
+Checkout Session path (`app/services/billing.py::TRIAL_PERIOD_DAYS`) --
+this is the "you signed up directly, here's your trial" equivalent for
+merchants who haven't been through Checkout yet.
 """
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -12,6 +32,7 @@ from app.api.deps import get_current_user
 from app.db.base import get_db
 from app.db.models import Merchant, TeamMember, TeamRole
 from app.schemas.auth import MeOut, MerchantLogin, MerchantSignup, Token
+from app.services.billing import TRIAL_PERIOD_DAYS
 from app.services.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -23,7 +44,12 @@ def signup(payload: MerchantSignup, db: Session = Depends(get_db)) -> MeOut:
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    merchant = Merchant(business_name=payload.business_name)
+    trial_ends_at = datetime.now(timezone.utc) + timedelta(days=TRIAL_PERIOD_DAYS)
+    merchant = Merchant(
+        business_name=payload.business_name,
+        subscription_status="trialing",
+        trial_ends_at=trial_ends_at,
+    )
     db.add(merchant)
     db.flush()
 

@@ -3,7 +3,7 @@ webhook per PLAN.md assumption A4."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_merchant
+from app.api.deps import require_active_subscription
 from app.db.base import get_db
 from app.db.models import Member, Merchant, Transaction
 from app.schemas.transaction import TransactionCreate, TransactionOut
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 def ingest_transaction(
     payload: TransactionCreate,
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> Transaction:
     member = (
         db.query(Member)
@@ -41,7 +41,7 @@ def list_transactions(
     member_id: str | None = None,
     limit: int = 100,
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> list[Transaction]:
     q = (
         db.query(Transaction)

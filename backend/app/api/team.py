@@ -1,17 +1,22 @@
 """Team management: invite/list/remove teammates, role gating.
 
-Read access (`GET /team`) is open to any authenticated team member of the
-merchant. Write endpoints (invite/remove/role-change) require the `admin`
-role via `require_admin`. All write endpoints scope lookups to the caller's
-own `merchant_id` (no cross-merchant IDOR) and guard against ever leaving a
-merchant with zero active admins (the "last-admin lockout" rule).
+Read access (`GET /team`) requires an active subscription via
+`require_active_subscription` (same convention as every other paid-tier
+router in this batch -- app/api/winback.py, app/api/experiments.py). Write
+endpoints (invite/remove/role-change) require both the `admin` role AND an
+active subscription via `require_admin_active_subscription`, so a
+cancelled/unpaid merchant admin can no longer invite or remove teammates
+indefinitely (TEST_REPORT_BATCH3.md §1 -- this router was the one gap in an
+otherwise-consistent gating pass). All write endpoints scope lookups to the
+caller's own `merchant_id` (no cross-merchant IDOR) and guard against ever
+leaving a merchant with zero active admins (the "last-admin lockout" rule).
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_admin
+from app.api.deps import require_active_subscription, require_admin_active_subscription
 from app.db.base import get_db
-from app.db.models import TeamMember, TeamRole
+from app.db.models import Merchant, TeamMember, TeamRole
 from app.schemas.auth import RoleUpdate, TeamMemberCreate, TeamMemberOut
 from app.services.security import hash_password
 
@@ -44,11 +49,11 @@ def _get_team_member_or_404(db: Session, merchant_id: str, team_member_id: str) 
 @router.get("", response_model=list[TeamMemberOut])
 def list_team(
     db: Session = Depends(get_db),
-    current_user: TeamMember = Depends(get_current_user),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> list[TeamMember]:
     return (
         db.query(TeamMember)
-        .filter(TeamMember.merchant_id == current_user.merchant_id)
+        .filter(TeamMember.merchant_id == merchant.id)
         .order_by(TeamMember.created_at.asc())
         .all()
     )
@@ -58,14 +63,14 @@ def list_team(
 def invite_team_member(
     payload: TeamMemberCreate,
     db: Session = Depends(get_db),
-    current_user: TeamMember = Depends(require_admin),
+    merchant: Merchant = Depends(require_admin_active_subscription),
 ) -> TeamMember:
     existing = db.query(TeamMember).filter(TeamMember.email == payload.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
     new_member = TeamMember(
-        merchant_id=current_user.merchant_id,
+        merchant_id=merchant.id,
         email=payload.email,
         hashed_password=hash_password(payload.password),
         role=payload.role,
@@ -80,12 +85,12 @@ def invite_team_member(
 def remove_team_member(
     team_member_id: str,
     db: Session = Depends(get_db),
-    current_user: TeamMember = Depends(require_admin),
+    merchant: Merchant = Depends(require_admin_active_subscription),
 ) -> None:
-    target = _get_team_member_or_404(db, current_user.merchant_id, team_member_id)
+    target = _get_team_member_or_404(db, merchant.id, team_member_id)
 
     if target.role == TeamRole.ADMIN.value and target.is_active:
-        if _active_admin_count(db, current_user.merchant_id) <= 1:
+        if _active_admin_count(db, merchant.id) <= 1:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Cannot remove the merchant's last remaining admin",
@@ -101,13 +106,13 @@ def update_team_member_role(
     team_member_id: str,
     payload: RoleUpdate,
     db: Session = Depends(get_db),
-    current_user: TeamMember = Depends(require_admin),
+    merchant: Merchant = Depends(require_admin_active_subscription),
 ) -> TeamMember:
-    target = _get_team_member_or_404(db, current_user.merchant_id, team_member_id)
+    target = _get_team_member_or_404(db, merchant.id, team_member_id)
 
     is_demotion = target.role == TeamRole.ADMIN.value and payload.role != TeamRole.ADMIN.value
     if is_demotion and target.is_active:
-        if _active_admin_count(db, current_user.merchant_id) <= 1:
+        if _active_admin_count(db, merchant.id) <= 1:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Cannot demote the merchant's last remaining admin",

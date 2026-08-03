@@ -267,6 +267,17 @@ def seed(reset: bool = True) -> None:
             business_name="Northwind Coffee Co.",
             shopify_webhook_secret=DEMO_SHOPIFY_WEBHOOK_SECRET,
             shopify_shop_domain=DEMO_SHOPIFY_SHOP_DOMAIN,
+            # Stripe billing (PLAN_BATCH3.md §2): the demo merchant must have
+            # an active subscription, or every protected route (now gated by
+            # require_active_subscription instead of get_current_merchant)
+            # would 402 the moment this batch ships -- see PLAN_BATCH3.md's
+            # "Risk to the existing 114 tests" table, flagged there as the
+            # single highest-regression-risk item in the whole batch.
+            # subscription_current_period_end is set far in the future so it
+            # never looks "stale" in the dashboard's billing banner.
+            subscription_status="active",
+            subscription_tier="growth",
+            subscription_current_period_end=now + timedelta(days=3650),
         )
         db.add(merchant)
         db.flush()

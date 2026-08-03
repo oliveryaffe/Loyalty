@@ -1,14 +1,31 @@
-"""AI capability endpoints: recommendations, churn, fraud alerts."""
-from fastapi import APIRouter, Depends, HTTPException
+"""AI capability endpoints: recommendations, churn, fraud alerts.
+
+PLAN_BATCH3.md §3/§4: `GET /churn` and `GET /fraud-alerts` are also where
+notifications (Slack/email on churn escalation + new fraud alerts) and
+win-back's auto-trigger path are wired in -- there is no scheduler in this
+codebase, so both piggyback on these existing request-triggered recompute
+paths (see app/services/notifications.py and app/services/winback.py for
+the full rationale). Delivery itself happens via FastAPI `BackgroundTasks`
+so a slow/down Slack endpoint never delays these responses.
+"""
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.ai.churn_model import score_all_members, score_member_churn
 from app.ai.fraud_detector import run_fraud_detection
 from app.ai.recommender import recommend_for_member
-from app.api.deps import get_current_merchant
+from app.api.deps import require_active_subscription
 from app.db.base import get_db
 from app.db.models import FraudAlert, Member, Merchant
 from app.schemas.ai import ChurnScoreOut, FraudAlertOut, RecommendationOut
+from app.services.notifications import (
+    check_churn_escalations,
+    format_member_bullet_list,
+    notify_merchant,
+    wants_churn_notifications,
+    wants_fraud_notifications,
+)
+from app.services.winback import maybe_auto_trigger_winback
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 
@@ -18,7 +35,7 @@ def get_recommendations(
     member_id: str,
     top_n: int = 5,
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> list[RecommendationOut]:
     member = (
         db.query(Member)
@@ -43,10 +60,31 @@ def get_recommendations(
 
 @router.get("/churn", response_model=list[ChurnScoreOut])
 def get_churn_scores(
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> list[ChurnScoreOut]:
     results = score_all_members(db, merchant.id)
+
+    # PLAN_BATCH3.md §3: transition-detect newly-escalated-to-high members
+    # (dedup/cooldown handled inside check_churn_escalations) and, if any,
+    # notify (batched, one message per request) and -- §4's explicit
+    # dependency on this same signal -- offer win-back's auto-trigger path
+    # a shot at the same list.
+    escalated = check_churn_escalations(db, merchant, results)
+    if escalated:
+        if wants_churn_notifications(merchant):
+            subject = f"{len(escalated)} member(s) just escalated to high churn risk"
+            body = format_member_bullet_list(
+                [f"{m.first_name} {m.last_name}" for m in escalated]
+            )
+            notify_merchant(merchant, subject, body, background_tasks)
+
+        score_by_member_id = {r.member_id: r.churn_risk_score for r in results}
+        maybe_auto_trigger_winback(db, merchant, escalated, score_by_member_id)
+
+    db.commit()
+
     return [
         ChurnScoreOut(
             member_id=r.member_id,
@@ -66,7 +104,7 @@ def get_churn_scores(
 def get_member_churn(
     member_id: str,
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> ChurnScoreOut:
     member = (
         db.query(Member)
@@ -90,16 +128,29 @@ def get_member_churn(
 
 @router.get("/fraud-alerts", response_model=list[FraudAlertOut])
 def get_fraud_alerts(
+    background_tasks: BackgroundTasks,
     refresh: bool = True,
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> list[FraudAlert]:
     """List fraud alerts for this merchant. By default re-runs detection
     first (`refresh=True`) so the alert feed reflects the latest
-    transactions; pass refresh=false to just read existing alerts."""
+    transactions; pass refresh=false to just read existing alerts.
+
+    PLAN_BATCH3.md §3: run_fraud_detection already dedupes internally (skips
+    any transaction that already has an alert) -- so "a FraudAlert was just
+    created by this call" is already exactly "genuinely new", no extra
+    dedup tracking needed here. One batched notification per call that
+    produces new alerts, never one per alert."""
     if refresh:
-        run_fraud_detection(db, merchant.id)
+        created = run_fraud_detection(db, merchant.id)
         db.commit()
+        if created and wants_fraud_notifications(merchant):
+            subject = f"{len(created)} new fraud alert(s) detected"
+            body = format_member_bullet_list(
+                [f"{a.reason} (member {a.member_id[:8]}, score {a.score:.2f})" for a in created]
+            )
+            notify_merchant(merchant, subject, body, background_tasks)
 
     alerts = (
         db.query(FraudAlert)

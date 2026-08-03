@@ -60,10 +60,18 @@ cd backend
 python3 -m pytest -q
 ```
 
-114 tests: the 69 from Batch 1 (ledger math incl. concurrency regression
+208 tests: the 114 from Batches 1–2 (see below) plus 94 new Batch 3 tests
+across GDPR (`test_gdpr.py`), Stripe billing (`test_billing.py`),
+notifications (`test_notifications.py`), win-back campaigns
+(`test_winback.py`), and A/B experiments (`test_experiments.py`), plus
+regression coverage added to `test_team.py` and `test_recommender.py` for
+bugs a tester pass found and a fix pass closed (see `TEST_REPORT_BATCH3.md`
+/ `MANAGER_REVIEW_BATCH3.md`).
+
+The original 114: 69 from Batch 1 (ledger math incl. concurrency regression
 tests, transaction validation, all three original AI modules, DB URL
 normalization, Shopify webhook ingestion, multi-user team accounts/roles)
-plus 45 new Batch 2 tests — CSV ingestion (`test_csv_ingest.py`), the
+plus 45 from Batch 2 — CSV ingestion (`test_csv_ingest.py`), the
 future-value model (`test_future_value.py`), the next-best-product model
 (`test_next_best_product.py`), and the `insights` API surface
 (`test_insights_api.py`).
@@ -246,6 +254,78 @@ real points for the upload.
 product), an upload button (with a "mint points" checkbox), and a
 "Download report" button that fetches `report.csv` as an authenticated
 blob download.
+
+---
+
+## 2c. Batch 3 additions (billing, notifications, win-back, A/B testing, GDPR)
+
+**GDPR technical pass.** Two new merchant-admin endpoints on the existing
+`members` router: `POST /api/v1/members/{id}/gdpr-erase` (idempotent —
+anonymizes name/email in place and marks the member inactive; this is
+**anonymization, not hard-delete**, so the merchant's own transaction/
+redemption history and AI training data stay intact under a pseudonymous
+id) and `GET /api/v1/members/{id}/gdpr-export` (one combined JSON export
+covering that member's transactions, redemptions, fraud alerts, win-back
+offers, and A/B experiment assignments — Art. 15/20 in one call). The
+marketing site and dashboard now self-host Inter (`.woff2`, SIL OFL 1.1)
+instead of loading it from Google's font CDN, which leaks visitor IPs to
+Google — a real, court-tested GDPR issue, not a hypothetical one. Placeholder
+`marketing/privacy.html` / `marketing/terms.html` pages exist (obvious
+"needs a solicitor" skeleton, not drafted legal text) and are linked from
+the marketing footer and the dashboard sidebar.
+
+**Stripe billing.** Three tiers — Starter £49/mo (≤1,000 members), Growth
+£149/mo (≤10,000 members, adds Shopify sync/Insights/notifications/
+win-back), Scale £399/mo (unlimited, adds A/B testing) — via Stripe
+Checkout + Billing Portal (`app/api/billing.py`, prefix `/api/v1/billing`:
+`checkout-session`, `portal-session`, `subscription`, and a signature-
+verified `webhook` endpoint handling the subscription lifecycle). Gating is
+two-state, not a single locked/unlocked flag: `past_due` merchants get a
+dismissible warning banner but stay fully functional (Stripe is still
+retrying the card); `canceled`/`unpaid`/no-subscription merchants get a
+`402` on most routes via a new `require_active_subscription` dependency.
+Explicitly exempted from any lock, always reachable: auth, the billing
+endpoints themselves, Shopify webhook ingestion (never lose a merchant's
+sales data over a lapsed card), and the GDPR erase/export endpoints (never
+paywall compliance). Requires real Stripe API keys to go live — see
+`backend/.env.example` — the app runs fine locally without them (billing
+endpoints return a clear `503` instead of a crash if unconfigured).
+
+**Notifications.** Per-merchant configurable Slack webhook URL and/or
+notification email (`/api/v1/settings/notifications`). No task scheduler
+exists in this codebase, so alerts piggyback on the existing on-demand
+`GET /ai/churn` / `GET /ai/fraud-alerts` recompute calls via FastAPI
+`BackgroundTasks` — a real limitation: nothing fires until someone loads
+the dashboard. A 24h cooldown (atomic UPDATE + rowcount check, the same
+lost-update-safe pattern `ledger.py` uses for points) stops the same
+escalation from re-notifying on every page load.
+
+**Win-back campaigns.** A simple per-merchant rule
+(`/api/v1/winback/rule`: "if churn risk ≥ X, offer reward Y") plus a
+manual "run now" trigger and an automatic check that reuses notifications'
+escalation-detection helper. `auto_trigger` defaults to **off** — mirrors
+Batch 2's `mint_points=false` precedent, no free rewards go out without the
+merchant opting in. A member is never offered twice.
+
+**A/B testing.** `/api/v1/experiments` — an admin picks two existing
+rewards and a traffic split; every currently-active member is immediately
+and permanently hashed into a variant (stable across refetches), and
+`recommend_for_member` steers each member toward their own variant (falling
+back to the full catalog rather than ever returning zero recommendations,
+if the exclusion would do that). A results view shows per-variant
+assigned/redeemed counts and rates with a clearly-labeled *directional*
+(not rigorous-statistics) winner indicator. Scale-tier feature per the
+pricing table above, though tier-specific enforcement beyond the standard
+active-subscription gate wasn't built this batch (noted in
+`PLAN_BATCH3.md` as a deliberate scope call).
+
+**Frontend**: new `/billing`, `/settings`, `/winback`, and `/experiments`
+pages, plus a `SubscriptionGate` wrapper around the whole dashboard for the
+soft/hard lock states described above.
+
+Full writeup: `PLAN_BATCH3.md` (architect), `TEST_REPORT_BATCH3.md`
+(adversarial QA — 1 high + 4 medium/low bugs found), `MANAGER_REVIEW_BATCH3.md`
+(independent go/no-go, verdict: GO after the fix pass).
 
 ---
 

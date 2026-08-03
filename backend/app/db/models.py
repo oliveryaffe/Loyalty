@@ -11,7 +11,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -68,6 +68,40 @@ class Merchant(Base):
     shopify_webhook_secret: Mapped[str | None] = mapped_column(String(128), nullable=True)
     shopify_shop_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Stripe billing (PLAN_BATCH3.md §2). All nullable/additive -- safe under
+    # app/db/base.py's _sync_missing_columns sweep, same convention as every
+    # other column added post-launch. subscription_status mirrors Stripe's
+    # own status strings (trialing/active/past_due/canceled/unpaid/
+    # incomplete/incomplete_expired) verbatim rather than a local enum, so
+    # webhook handlers can write it through unchanged -- see
+    # app/api/deps.py::require_active_subscription for how these are
+    # interpreted (trialing/active/past_due allowed through, everything else
+    # -- including NULL, meaning "never subscribed" -- hard-locked).
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    subscription_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    subscription_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)  # starter/growth/scale
+    subscription_current_period_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Notifications (PLAN_BATCH3.md §3). All nullable/additive -- same
+    # convention as the Stripe columns above. Slack webhook URL is
+    # self-serve per merchant (each merchant pastes their own Slack
+    # "Incoming Webhooks" URL); email requires the owner to have supplied
+    # platform-level SMTP credentials (app/config.py) before it actually
+    # sends anything. notify_on_churn_risk/notify_on_fraud_alert are
+    # nullable booleans -- existing merchant rows read back as NULL after
+    # the ALTER (see "Migration approach" in the plan), so application
+    # code must never read these attributes directly: use
+    # app/services/notifications.py::wants_churn_notifications /
+    # wants_fraud_notifications, which treat NULL the same as True.
+    notification_slack_webhook_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notification_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notify_on_churn_risk: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    notify_on_fraud_alert: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
     members: Mapped[list["Member"]] = relationship(back_populates="merchant")
     rewards: Mapped[list["RewardCatalogItem"]] = relationship(back_populates="merchant")
     team_members: Mapped[list["TeamMember"]] = relationship(
@@ -117,6 +151,31 @@ class Member(Base):
     # Synthetic-data-only marker so tests/seed can assert cohort membership
     # without re-deriving it from behavior. Not exposed as ML input.
     synthetic_cohort: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
+    # GDPR erasure (UK GDPR right to erasure / Art. 17). Nullable/additive --
+    # safe under app/db/base.py's _sync_missing_columns sweep. NULL means
+    # "never erased" (the overwhelming majority of rows); set once, by
+    # POST /api/v1/members/{id}/gdpr-erase, and never cleared again.
+    # Deliberately NOT a hard delete -- see app/api/members.py::gdpr_erase_member
+    # for the anonymize-in-place rationale (Transaction/Redemption/FraudAlert
+    # rows for this member are preserved so merchant business records and AI
+    # training data don't silently lose data points on every erasure request).
+    erased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Churn-escalation notification dedup (PLAN_BATCH3.md §3). Both
+    # nullable/additive. `last_known_risk_band` mirrors the band computed
+    # by app/ai/churn_model.py the last time a request-triggered recompute
+    # observed this member (kept in sync for every band, not just "high"),
+    # so a later escalation is detected as a genuine low/medium -> high
+    # *transition*, not just "currently high" (which would re-fire on
+    # every dashboard refresh). `risk_escalated_notified_at` is stamped
+    # only on a winning transition and doubles as the cooldown clock (see
+    # app/services/notifications.py::check_churn_escalations) -- an
+    # oscillation safety net so a member stuck at "high" for a very long
+    # time without ever dropping still gets re-notified at most once per
+    # `settings.notification_cooldown_hours`, not zero times forever.
+    last_known_risk_band: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    risk_escalated_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     merchant: Mapped["Merchant"] = relationship(back_populates="members")
     transactions: Mapped[list["Transaction"]] = relationship(
@@ -213,6 +272,16 @@ class Redemption(Base):
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
+    # Win-back campaigns (PLAN_BATCH3.md §4). Nullable/additive, same
+    # convention as every other post-launch column -- existing rows read
+    # back as NULL, which app code never needs to special-case since
+    # nothing reads this column for pre-existing redemptions. "manual"
+    # (the default for new ORM-created rows going forward) covers ordinary
+    # staff-processed redemptions via POST /rewards/redeem; "winback"
+    # marks a comped redemption created by
+    # app/services/winback.py::grant_winback_reward.
+    source: Mapped[str | None] = mapped_column(String(20), default="manual", nullable=True)
+
     member: Mapped["Member"] = relationship(back_populates="redemptions")
     reward: Mapped["RewardCatalogItem"] = relationship(back_populates="redemptions")
 
@@ -232,3 +301,124 @@ class FraudAlert(Base):
 
     transaction: Mapped["Transaction"] = relationship(back_populates="fraud_alerts")
     member: Mapped["Member"] = relationship()
+
+
+class BillingEvent(Base):
+    """Idempotency + audit log for Stripe webhook deliveries (PLAN_BATCH3.md
+    §2). Exactly the same lesson this codebase already learned twice
+    (Transaction.external_order_id's unique constraint for Shopify webhook
+    dedup, app/services/shopify.py) applied to Stripe: webhooks can be
+    redelivered, so a DB-level UNIQUE constraint on the event id -- not a
+    SELECT-then-branch check -- is the actual source of truth. See
+    app/api/billing.py::stripe_webhook, which inserts this row first and
+    treats the resulting IntegrityError as "already processed, no-op".
+
+    Brand-new table, so Base.metadata.create_all handles it directly --
+    zero migration risk (see "Migration approach" in PLAN_BATCH3.md)."""
+
+    __tablename__ = "billing_events"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    stripe_event_id: Mapped[str] = mapped_column(String(80), unique=True, nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    merchant_id: Mapped[str | None] = mapped_column(ForeignKey("merchants.id"), nullable=True)
+    processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    raw_payload: Mapped[str] = mapped_column(Text, default="")
+
+
+class WinbackRule(Base):
+    """One rule per merchant (PLAN_BATCH3.md §4) -- deliberate MVP
+    simplicity, not a multi-rule campaign builder. `unique=True` on
+    merchant_id is the enforced guarantee of "one rule", not just app-level
+    convention. `churn_risk_threshold` defaults to
+    app.ai.churn_model.RISK_BAND_MEDIUM_MAX (65.0), i.e. "high" band by
+    default. `auto_trigger` defaults to False -- see
+    app/services/winback.py::grant_winback_reward's docstring for why an
+    automatic free-reward giveaway must be an explicit merchant opt-in,
+    not a default-on behavior (same precedent as Batch 2's
+    `mint_points=false`).
+
+    Brand-new table -- create_all handles it directly, zero migration risk."""
+
+    __tablename__ = "winback_rules"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    merchant_id: Mapped[str] = mapped_column(ForeignKey("merchants.id"), nullable=False, unique=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    churn_risk_threshold: Mapped[float] = mapped_column(Float, default=65.0, nullable=False)
+    reward_id: Mapped[str] = mapped_column(ForeignKey("reward_catalog_items.id"), nullable=False)
+    auto_trigger: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class WinbackOffer(Base):
+    """Audit trail + the actual anti-repeat-offer guard (PLAN_BATCH3.md §4):
+    `unique=True` on member_id means a member can receive at most ONE
+    win-back offer, ever, for the lifetime of this MVP feature -- a
+    deliberately permanent (not time-windowed) "never re-offer" rule, see
+    the plan's explicit judgment call on this. The unique constraint is the
+    primary defense-in-depth guard against a double-offer race, not just
+    the eligibility query in app/services/winback.py.
+
+    Brand-new table -- create_all handles it directly, zero migration risk."""
+
+    __tablename__ = "winback_offers"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    merchant_id: Mapped[str] = mapped_column(ForeignKey("merchants.id"), nullable=False, index=True)
+    member_id: Mapped[str] = mapped_column(ForeignKey("members.id"), nullable=False, unique=True)
+    rule_id: Mapped[str] = mapped_column(ForeignKey("winback_rules.id"), nullable=False)
+    redemption_id: Mapped[str] = mapped_column(ForeignKey("redemptions.id"), nullable=False)
+    churn_risk_score_at_trigger: Mapped[float] = mapped_column(Float, nullable=False)
+    triggered_by: Mapped[str] = mapped_column(String(20), nullable=False)  # "manual" | "auto"
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class RewardExperiment(Base):
+    """A/B test of two reward variants (PLAN_BATCH3.md §5) -- a merchant-admin
+    dashboard tool, not a consumer-facing page split: "assignment" here is a
+    backend cohort split (which arm a member is in) that (1) steers
+    app/ai/recommender.py::recommend_for_member toward each member's
+    assigned variant and (2) is measured by comparing redemption behavior
+    between the two cohorts. Deliberately the smallest-scope MVP shape --
+    random assignment + a results comparison view, not a full
+    experimentation platform.
+
+    Brand-new table -- create_all handles it directly, zero migration risk."""
+
+    __tablename__ = "reward_experiments"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    merchant_id: Mapped[str] = mapped_column(ForeignKey("merchants.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    variant_a_reward_id: Mapped[str] = mapped_column(ForeignKey("reward_catalog_items.id"), nullable=False)
+    variant_b_reward_id: Mapped[str] = mapped_column(ForeignKey("reward_catalog_items.id"), nullable=False)
+    traffic_split: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)  # fraction assigned to B
+    status: Mapped[str] = mapped_column(String(20), default="running", nullable=False)  # running | completed
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ExperimentAssignment(Base):
+    """Which arm ("a"/"b") a member was randomly assigned to for a given
+    experiment (PLAN_BATCH3.md §5). Bulk-assigned once, at experiment
+    creation time, over every active member of the merchant -- deterministic
+    (SHA-256 hash of `f"{experiment_id}:{member_id}"`, see
+    app/services/experiments.py::assign_variant), so re-fetching a member's
+    assignment never flips it, without needing to persist any RNG seed.
+    `UniqueConstraint(experiment_id, member_id)` is defense-in-depth (the
+    primary guard is simply that assignment only ever happens once, in the
+    single bulk pass at creation -- no re-assignment endpoint exists).
+
+    Brand-new table -- create_all handles it directly, zero migration risk."""
+
+    __tablename__ = "experiment_assignments"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    experiment_id: Mapped[str] = mapped_column(ForeignKey("reward_experiments.id"), nullable=False, index=True)
+    member_id: Mapped[str] = mapped_column(ForeignKey("members.id"), nullable=False, index=True)
+    variant: Mapped[str] = mapped_column(String(1), nullable=False)  # "a" | "b"
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    __table_args__ = (UniqueConstraint("experiment_id", "member_id"),)

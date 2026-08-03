@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Ledgerly — AI-powered loyalty for growing retailers</title>
 <meta name="description" content="Ledgerly is a loyalty platform with AI built in: personalised rewards, churn prediction, fraud detection, customer lifetime value forecasting, and next-best-product recommendations, with native Shopify sync and role-based team accounts." />
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = {
@@ -25,6 +22,45 @@
   }
 </script>
 <style>
+  /* Self-hosted Inter (SIL OFL 1.1) -- vendored .woff2 files in ./fonts,
+     replacing the Google Fonts CDN link that used to load these same
+     weights from fonts.googleapis.com/fonts.gstatic.com. See
+     ./fonts/LICENSE-Inter-OFL.txt for the license text. */
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('./fonts/Inter-400.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('./fonts/Inter-500.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('./fonts/Inter-600.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('./fonts/Inter-700.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+    src: url('./fonts/Inter-800.woff2') format('woff2');
+  }
   body { font-family: 'Inter', sans-serif; background: #0B0E14; }
   .glow {
     background: radial-gradient(60% 60% at 50% 40%, rgba(109,91,255,0.35) 0%, rgba(11,14,20,0) 70%);
@@ -307,6 +343,8 @@
       <a href="#product" class="hover:text-white transition">Product</a>
       <a href="#ai" class="hover:text-white transition">AI Layer</a>
       <a href="#how" class="hover:text-white transition">How it works</a>
+      <a href="/privacy.html" class="hover:text-white transition">Privacy</a>
+      <a href="/terms.html" class="hover:text-white transition">Terms</a>
       <a href="mailto:hello@ledgerly.io" class="hover:text-white transition">Contact</a>
     </div>
   </div>

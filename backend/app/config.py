@@ -57,5 +57,33 @@ class Settings(BaseSettings):
     fraud_velocity_window_hours: int = 24
     fraud_velocity_max_txns: int = 5
 
+    # Stripe billing (PLAN_BATCH3.md §2). All optional/`None`-defaulted so the
+    # app boots fine with zero Stripe config (local dev, CI) -- billing
+    # endpoints return a clear 503 "billing not configured" rather than a raw
+    # exception when these are unset. See app/services/billing.py.
+    stripe_secret_key: str | None = None
+    stripe_publishable_key: str | None = None
+    stripe_webhook_secret: str | None = None
+    stripe_price_id_starter: str | None = None
+    stripe_price_id_growth: str | None = None
+    stripe_price_id_scale: str | None = None
+    billing_success_url: str = "http://localhost:5173/billing/success"
+    billing_cancel_url: str = "http://localhost:5173/billing/cancel"
+
+    # Notifications (PLAN_BATCH3.md §3). SMTP fields are all optional/
+    # `None`-defaulted, same "owner-supplied external dependency" pattern as
+    # Stripe above -- the app boots and runs fine with zero SMTP config
+    # (local dev, CI); app/services/notifications.py::send_email just logs a
+    # warning and no-ops until smtp_host is set. Slack notifications need no
+    # equivalent platform-level config -- each merchant supplies their own
+    # webhook URL via PATCH /api/v1/settings/notifications.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_address: str = "notifications@ledgerly.app"
+    notification_http_timeout_seconds: float = 3.0
+    notification_cooldown_hours: int = 24
+
 
 settings = Settings()

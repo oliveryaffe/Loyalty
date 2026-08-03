@@ -2,6 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /site
 COPY index.html .
+COPY privacy.html .
+COPY terms.html .
+COPY fonts/ ./fonts/
 
 EXPOSE 8080
 

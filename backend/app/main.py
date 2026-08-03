@@ -8,7 +8,20 @@ OpenAPI/Swagger docs auto-generated at /docs (see PLAN.md P3 acceptance item).
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, auth, insights, members, rewards, team, transactions, webhooks
+from app.api import (
+    ai,
+    auth,
+    billing,
+    experiments,
+    insights,
+    members,
+    rewards,
+    settings as settings_api,
+    team,
+    transactions,
+    webhooks,
+    winback,
+)
 from app.config import settings
 from app.db.base import init_db
 
@@ -48,3 +61,7 @@ app.include_router(ai.router)
 app.include_router(team.router)
 app.include_router(webhooks.router)
 app.include_router(insights.router)
+app.include_router(billing.router)
+app.include_router(settings_api.router)
+app.include_router(winback.router)
+app.include_router(experiments.router)

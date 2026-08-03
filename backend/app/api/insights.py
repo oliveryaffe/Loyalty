@@ -1,7 +1,9 @@
 """Insights API: CSV upload ingestion, per-member + merchant-wide
 future-value and next-best-product, and a combined CSV export
 (PLAN_BATCH2.md §5). All endpoints are JWT-protected via
-`get_current_merchant` -- dashboard-initiated actions, same as `ai.py`
+`require_active_subscription` (PLAN_BATCH3.md §2 -- hard-locks a lapsed
+merchant, same as `ai.py`/`rewards.py`/`transactions.py`/most of
+`members.py`) -- dashboard-initiated actions, same as `ai.py`
 (unlike the Shopify webhook, which is a third-party callback)."""
 from __future__ import annotations
 
@@ -18,7 +20,7 @@ from app.ai.future_value import (
     train_future_value_model,
 )
 from app.ai.next_best_product import build_affinity_matrix, recommend_next_best
-from app.api.deps import get_current_merchant
+from app.api.deps import require_active_subscription
 from app.db.base import get_db
 from app.db.models import Member, Merchant
 from app.schemas.insights import FutureValueOut, InsightsUploadResult, NextBestOut
@@ -64,7 +66,7 @@ async def upload_insights_csv(
         ),
     ),
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> InsightsUploadResult:
     filename = (file.filename or "").lower()
     content_type = (file.content_type or "").lower()
@@ -88,7 +90,7 @@ async def upload_insights_csv(
 def get_future_value(
     horizon_days: int = Query(DEFAULT_HORIZON_DAYS, gt=0),
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> list[FutureValueOut]:
     results = score_all_members_future_value(db, merchant.id, horizon_days=horizon_days)
     return [_to_future_value_out(r) for r in results]
@@ -99,7 +101,7 @@ def get_future_value_for_member(
     member_id: str,
     horizon_days: int = Query(DEFAULT_HORIZON_DAYS, gt=0),
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> FutureValueOut:
     member = _get_member_or_404(db, member_id, merchant)
     model = train_future_value_model(db, merchant.id)
@@ -112,7 +114,7 @@ def get_next_best_product(
     member_id: str,
     top_n: int = Query(DEFAULT_TOP_N, gt=0),
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> list[NextBestOut]:
     member = _get_member_or_404(db, member_id, merchant)
     affinity_matrix, granularity = build_affinity_matrix(db, merchant.id)
@@ -133,7 +135,7 @@ def get_next_best_product(
 def get_insights_report_csv(
     horizon_days: int = Query(DEFAULT_HORIZON_DAYS, gt=0),
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> StreamingResponse:
     """Combined future-value + next-best-product export, one row per
     member (PLAN_BATCH2.md §5). stdlib csv.writer into an io.StringIO --

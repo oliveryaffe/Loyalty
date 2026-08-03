@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Member, Redemption, RewardCatalogItem
+from app.db.models import ExperimentAssignment, Member, Redemption, RewardCatalogItem, RewardExperiment
 from app.services.ledger import TIER_RANK
 
 WEIGHT_AFFORDABILITY = 0.45
@@ -102,13 +102,37 @@ def score_rewards_for_member(
     return scored
 
 
-def recommend_for_member(db: Session, member: Member, top_n: int = 5) -> list[RewardScore]:
-    candidates = (
-        db.query(RewardCatalogItem)
-        .filter(RewardCatalogItem.merchant_id == member.merchant_id, RewardCatalogItem.active.is_(True))
+def _excluded_reward_ids_for_member(db: Session, member: Member) -> set[str]:
+    """A/B testing (PLAN_BATCH3.md §5): Ledgerly has no separate
+    member-facing storefront, so the concrete behavioral lever a reward
+    experiment has is steering `recommend_for_member` -- if this member has
+    an `ExperimentAssignment` for a still-`"running"` `RewardExperiment`,
+    the *other* variant's reward is excluded from their recommendations so
+    they only ever see/are steered toward their own assigned arm's version.
+    Stops filtering once the experiment's status is no longer "running"
+    (see `POST /experiments/{id}/end`)."""
+    rows = (
+        db.query(ExperimentAssignment.variant, RewardExperiment.variant_a_reward_id, RewardExperiment.variant_b_reward_id)
+        .join(RewardExperiment, ExperimentAssignment.experiment_id == RewardExperiment.id)
+        .filter(ExperimentAssignment.member_id == member.id, RewardExperiment.status == "running")
         .all()
     )
+    excluded: set[str] = set()
+    for variant, reward_a_id, reward_b_id in rows:
+        excluded.add(reward_b_id if variant == "a" else reward_a_id)
+    return excluded
 
+
+def _candidate_rewards(db: Session, member: Member, excluded_reward_ids: set[str]) -> list[RewardCatalogItem]:
+    candidate_query = db.query(RewardCatalogItem).filter(
+        RewardCatalogItem.merchant_id == member.merchant_id, RewardCatalogItem.active.is_(True)
+    )
+    if excluded_reward_ids:
+        candidate_query = candidate_query.filter(RewardCatalogItem.id.notin_(excluded_reward_ids))
+    return candidate_query.all()
+
+
+def _rank_candidates(db: Session, member: Member, candidates: list[RewardCatalogItem]) -> list[RewardScore]:
     member_redemptions = (
         db.query(Redemption)
         .filter(Redemption.member_id == member.id, Redemption.status == "completed")
@@ -129,5 +153,22 @@ def recommend_for_member(db: Session, member: Member, top_n: int = 5) -> list[Re
     )
     global_popularity: Counter = Counter(r.reward_id for r in all_completed_redemptions)
 
-    ranked = score_rewards_for_member(member, candidates, member_categories, global_popularity)
+    return score_rewards_for_member(member, candidates, member_categories, global_popularity)
+
+
+def recommend_for_member(db: Session, member: Member, top_n: int = 5) -> list[RewardScore]:
+    excluded_reward_ids = _excluded_reward_ids_for_member(db, member)
+
+    ranked = _rank_candidates(db, member, _candidate_rewards(db, member, excluded_reward_ids))
+
+    if not ranked and excluded_reward_ids:
+        # A/B-experiment variant exclusion is best-effort steering, not a
+        # hard business rule -- it must never leave a member with zero
+        # recommendations when a non-empty list would otherwise be
+        # available (TEST_REPORT_BATCH3.md §6: confirmed live-reproducible
+        # with a small reward catalog where the excluded reward was the
+        # member's only tier/active-eligible option). Fall back to not
+        # excluding the other variant's reward for this call.
+        ranked = _rank_candidates(db, member, _candidate_rewards(db, member, set()))
+
     return ranked[:top_n]

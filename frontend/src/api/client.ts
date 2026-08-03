@@ -374,6 +374,207 @@ export async function uploadInsightsCsv(
   return (await res.json()) as InsightsUploadResult;
 }
 
+// ---------------------------------------------------------------------
+// Billing (Batch 3 §2)
+// ---------------------------------------------------------------------
+
+export type SubscriptionTier = "starter" | "growth" | "scale";
+
+export interface SubscriptionOut {
+  subscription_status: string | null;
+  subscription_tier: string | null;
+  subscription_current_period_end: string | null;
+  trial_ends_at: string | null;
+}
+
+export interface CheckoutSessionOut {
+  checkout_url: string;
+}
+
+export interface PortalSessionOut {
+  portal_url: string;
+}
+
+// Statuses that keep the dashboard/API fully usable -- mirrors
+// backend/app/api/deps.py::ALLOWED_SUBSCRIPTION_STATUSES exactly (see
+// PLAN_BATCH3.md §2). Anything else (canceled/unpaid/incomplete/
+// incomplete_expired/null -- "never subscribed") is a hard lock.
+export const ALLOWED_SUBSCRIPTION_STATUSES = new Set(["trialing", "active", "past_due"]);
+
+export function getSubscription(): Promise<SubscriptionOut> {
+  return request<SubscriptionOut>("/billing/subscription");
+}
+
+export function createCheckoutSession(tier: SubscriptionTier): Promise<CheckoutSessionOut> {
+  return request<CheckoutSessionOut>("/billing/checkout-session", {
+    method: "POST",
+    body: JSON.stringify({ tier }),
+  });
+}
+
+export function createPortalSession(): Promise<PortalSessionOut> {
+  return request<PortalSessionOut>("/billing/portal-session", { method: "POST" });
+}
+
+// ---------------------------------------------------------------------
+// Notification settings (Batch 3 §3)
+// ---------------------------------------------------------------------
+
+export interface NotificationSettingsOut {
+  notification_slack_webhook_url: string | null;
+  notification_email: string | null;
+  notify_on_churn_risk: boolean;
+  notify_on_fraud_alert: boolean;
+}
+
+export interface NotificationSettingsUpdate {
+  notification_slack_webhook_url?: string | null;
+  notification_email?: string | null;
+  notify_on_churn_risk?: boolean;
+  notify_on_fraud_alert?: boolean;
+}
+
+export function getNotificationSettings(): Promise<NotificationSettingsOut> {
+  return request<NotificationSettingsOut>("/settings/notifications");
+}
+
+export function updateNotificationSettings(
+  payload: NotificationSettingsUpdate
+): Promise<NotificationSettingsOut> {
+  return request<NotificationSettingsOut>("/settings/notifications", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+// ---------------------------------------------------------------------
+// Win-back campaigns (Batch 3 §4)
+// ---------------------------------------------------------------------
+
+export interface WinbackRuleOut {
+  id: string | null;
+  merchant_id: string;
+  enabled: boolean;
+  churn_risk_threshold: number;
+  reward_id: string | null;
+  auto_trigger: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface WinbackRuleIn {
+  enabled: boolean;
+  churn_risk_threshold: number;
+  reward_id: string;
+  auto_trigger: boolean;
+}
+
+export interface WinbackRunResult {
+  offers_sent: number;
+  member_ids: string[];
+}
+
+export interface WinbackOfferOut {
+  id: string;
+  merchant_id: string;
+  member_id: string;
+  rule_id: string;
+  redemption_id: string;
+  churn_risk_score_at_trigger: number;
+  triggered_by: string;
+  created_at: string;
+}
+
+export function getWinbackRule(): Promise<WinbackRuleOut> {
+  return request<WinbackRuleOut>("/winback/rule");
+}
+
+export function saveWinbackRule(payload: WinbackRuleIn): Promise<WinbackRuleOut> {
+  return request<WinbackRuleOut>("/winback/rule", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function runWinback(): Promise<WinbackRunResult> {
+  return request<WinbackRunResult>("/winback/run", { method: "POST" });
+}
+
+export function listWinbackOffers(): Promise<WinbackOfferOut[]> {
+  return request<WinbackOfferOut[]>("/winback/offers");
+}
+
+// ---------------------------------------------------------------------
+// A/B testing for reward structures (Batch 3 §5)
+// ---------------------------------------------------------------------
+
+export interface ExperimentOut {
+  id: string;
+  merchant_id: string;
+  name: string;
+  variant_a_reward_id: string;
+  variant_b_reward_id: string;
+  traffic_split: number;
+  status: string;
+  started_at: string;
+  ended_at: string | null;
+}
+
+export interface ExperimentDetailOut extends ExperimentOut {
+  members_assigned_a: number;
+  members_assigned_b: number;
+}
+
+export interface ExperimentCreate {
+  name: string;
+  variant_a_reward_id: string;
+  variant_b_reward_id: string;
+  traffic_split: number;
+}
+
+export interface VariantResultOut {
+  variant: string;
+  reward_id: string;
+  reward_name: string;
+  members_assigned: number;
+  redemptions_count: number;
+  redemption_rate: number;
+  total_points_spent: number;
+}
+
+export interface ExperimentResultsOut {
+  experiment_id: string;
+  status: string;
+  variant_a: VariantResultOut;
+  variant_b: VariantResultOut;
+  z_score: number | null;
+  directional_winner: string;
+  sample_size_caveat: string;
+}
+
+export function listExperiments(): Promise<ExperimentOut[]> {
+  return request<ExperimentOut[]>("/experiments");
+}
+
+export function createExperiment(payload: ExperimentCreate): Promise<ExperimentDetailOut> {
+  return request<ExperimentDetailOut>("/experiments", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getExperiment(id: string): Promise<ExperimentDetailOut> {
+  return request<ExperimentDetailOut>(`/experiments/${id}`);
+}
+
+export function getExperimentResults(id: string): Promise<ExperimentResultsOut> {
+  return request<ExperimentResultsOut>(`/experiments/${id}/results`);
+}
+
+export function endExperiment(id: string): Promise<ExperimentOut> {
+  return request<ExperimentOut>(`/experiments/${id}/end`, { method: "POST" });
+}
+
 // report.csv needs the Authorization header, so it can't be a plain
 // <a href> link (JWT isn't a cookie in this app) -- fetch as a blob and
 // trigger a synthetic download instead.

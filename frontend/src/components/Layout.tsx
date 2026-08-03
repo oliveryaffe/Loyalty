@@ -9,7 +9,21 @@ const NAV_ITEMS = [
   { to: "/rewards", label: "Rewards" },
   { to: "/fraud-alerts", label: "Fraud Alerts" },
   { to: "/insights", label: "Insights" },
+  { to: "/winback", label: "Win-back" },
+  { to: "/experiments", label: "A/B Testing" },
+  { to: "/settings", label: "Settings" },
+  { to: "/billing", label: "Billing" },
 ];
+
+// Base URL of the marketing site, which hosts the single canonical copy of
+// the (placeholder) privacy/terms pages -- see PLAN_BATCH3.md §1d. Not
+// duplicated inside the dashboard so there's only ever one copy of the
+// legal placeholder text to keep in sync. Defaults to "/" for local dev,
+// where the marketing site and dashboard aren't co-hosted at the same
+// origin and this link is mostly a no-op; set VITE_MARKETING_URL to the
+// deployed marketing site's origin in production.
+const MARKETING_URL: string =
+  (import.meta.env.VITE_MARKETING_URL as string | undefined) ?? "/";
 
 export default function Layout() {
   const { merchant, logout } = useAuth();
@@ -39,6 +53,14 @@ export default function Layout() {
         <button className="logout" onClick={logout}>
           Log out{merchant ? ` (${merchant.email})` : ""}
         </button>
+        <div className="sidebar-footer">
+          <a href={`${MARKETING_URL}privacy.html`} target="_blank" rel="noreferrer">
+            Privacy
+          </a>
+          <a href={`${MARKETING_URL}terms.html`} target="_blank" rel="noreferrer">
+            Terms
+          </a>
+        </div>
       </aside>
       <main className="main">
         <Outlet />

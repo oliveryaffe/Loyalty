@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_merchant
+from app.api.deps import require_active_subscription
 from app.db.base import get_db
 from app.db.models import Member, Merchant, Redemption, RewardCatalogItem
 from app.schemas.reward import RedemptionOut, RedemptionRequest, RewardCreate, RewardOut
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/v1/rewards", tags=["rewards"])
 @router.get("", response_model=list[RewardOut])
 def list_rewards(
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> list[RewardCatalogItem]:
     return (
         db.query(RewardCatalogItem)
@@ -33,7 +33,7 @@ def list_rewards(
 def create_reward(
     payload: RewardCreate,
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> RewardCatalogItem:
     reward = RewardCatalogItem(merchant_id=merchant.id, **payload.model_dump())
     db.add(reward)
@@ -46,7 +46,7 @@ def create_reward(
 def redeem(
     payload: RedemptionRequest,
     db: Session = Depends(get_db),
-    merchant: Merchant = Depends(get_current_merchant),
+    merchant: Merchant = Depends(require_active_subscription),
 ) -> Redemption:
     member = (
         db.query(Member)
