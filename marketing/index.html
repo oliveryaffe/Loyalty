@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Ledgerly — AI-powered loyalty for growing retailers</title>
-<meta name="description" content="Ledgerly is a loyalty platform with AI built in: personalized rewards, churn prediction, and fraud detection out of the box." />
+<meta name="description" content="Ledgerly is a loyalty platform with AI built in: personalized rewards, churn prediction, fraud detection, customer lifetime value forecasting, and next-best-product recommendations, with native Shopify sync and role-based team accounts." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -79,15 +79,15 @@
     <div class="max-w-3xl">
       <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs text-slate-300 mb-6">
         <span class="w-2 h-2 rounded-full bg-mint dot"></span>
-        Now with real-time fraud detection
+        Now with Shopify sync and AI-forecasted customer value
       </div>
       <h1 class="text-4xl sm:text-6xl font-extrabold text-white leading-[1.05] tracking-tight">
         Loyalty that gets <span class="grad-text">smarter</span> with every purchase.
       </h1>
       <p class="mt-6 text-lg text-slate-400 max-w-2xl">
         Ledgerly is the points-and-rewards platform built for teams who don't want a spreadsheet
-        bolted onto a coupon code. Personalized recommendations, churn prediction, and fraud
-        detection come standard — not as a $50k add-on.
+        bolted onto a coupon code. Personalized recommendations, churn prediction, fraud
+        detection, and future-value forecasting come standard — not as a $50k add-on.
       </p>
       <div class="mt-8 flex flex-wrap items-center gap-4">
         <a href="#cta" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg hover:opacity-90 transition">Get a demo</a>
@@ -139,6 +139,11 @@
       <span>Kindling Market</span>
     </div>
   </div>
+  <div class="max-w-7xl mx-auto px-6 pb-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-500">
+    <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-mint"></span>Native Shopify order sync</span>
+    <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-mint"></span>CSV bulk upload for historical data</span>
+    <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-mint"></span>Role-based team accounts</span>
+  </div>
 </section>
 
 <!-- PROBLEM / SOLUTION -->
@@ -174,7 +179,7 @@
   <div class="max-w-7xl mx-auto px-6 py-24">
     <div class="max-w-2xl mb-14">
       <p class="text-sm font-semibold text-plum uppercase tracking-widest mb-3">The AI layer</p>
-      <h2 class="text-3xl sm:text-4xl font-bold text-white">Three models, working on every account, all the time.</h2>
+      <h2 class="text-3xl sm:text-4xl font-bold text-white">Five models, working on every account, all the time.</h2>
     </div>
     <div class="grid md:grid-cols-3 gap-6">
       <div class="card rounded-2xl p-6">
@@ -201,6 +206,22 @@
           catching points abuse before it drains your reward budget.
         </p>
       </div>
+      <div class="card rounded-2xl p-6">
+        <div class="w-10 h-10 rounded-lg bg-plum/20 flex items-center justify-center text-plum font-bold mb-4">④</div>
+        <h3 class="text-lg font-semibold text-white">Future value forecasting</h3>
+        <p class="mt-2 text-sm text-slate-400">
+          Upload your customer and transaction history and Ledgerly backtests a lifetime-value
+          model per member — so you know who's worth investing in before you spend the budget.
+        </p>
+      </div>
+      <div class="card rounded-2xl p-6">
+        <div class="w-10 h-10 rounded-lg bg-coral/20 flex items-center justify-center text-coral font-bold mb-4">⑤</div>
+        <h3 class="text-lg font-semibold text-white">Next-best-product picks</h3>
+        <p class="mt-2 text-sm text-slate-400">
+          Item-based collaborative filtering over purchase history surfaces the single most
+          likely next purchase for every member — a ready-made upsell list, not a guess.
+        </p>
+      </div>
     </div>
   </div>
 </section>
@@ -215,7 +236,7 @@
     <div>
       <p class="text-4xl font-extrabold grad-text mb-3">01</p>
       <h3 class="font-semibold text-white">Connect transactions</h3>
-      <p class="mt-2 text-sm text-slate-400">Point Ledgerly at your POS or e-commerce events feed.</p>
+      <p class="mt-2 text-sm text-slate-400">Sync live orders via the Shopify webhook, or upload a CSV of historical customer and purchase data.</p>
     </div>
     <div>
       <p class="text-4xl font-extrabold grad-text mb-3">02</p>
@@ -230,7 +251,7 @@
     <div>
       <p class="text-4xl font-extrabold grad-text mb-3">04</p>
       <h3 class="font-semibold text-white">Act from one dashboard</h3>
-      <p class="mt-2 text-sm text-slate-400">Your team sees who to reward, who to win back, and what to flag.</p>
+      <p class="mt-2 text-sm text-slate-400">Invite your whole team with role-based access — everyone sees who to reward, who to win back, and what to flag.</p>
     </div>
   </div>
 </section>
@@ -248,8 +269,8 @@
         <p class="mt-2 text-sm text-slate-400">false-positive rate on normal activity</p>
       </div>
       <div>
-        <p class="text-4xl font-extrabold text-white">42/42</p>
-        <p class="mt-2 text-sm text-slate-400">automated tests passing, including concurrency checks</p>
+        <p class="text-4xl font-extrabold text-white">114/114</p>
+        <p class="mt-2 text-sm text-slate-400">automated tests passing, including concurrency and webhook idempotency checks</p>
       </div>
       <div>
         <p class="text-4xl font-extrabold text-white">&lt;1 day</p>
