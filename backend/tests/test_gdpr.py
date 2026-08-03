@@ -200,63 +200,34 @@ def test_gdpr_export_after_erasure_is_410(client, admin_headers):
     assert resp.status_code == 410
 
 
-def _make_stale_member(db_session, merchant_id, email="stale-gdpr@example.com", days_inactive=120):
-    """Guaranteed churn_risk_score == 100 ("high" band), same helper shape
-    as test_winback.py -- makes the member eligible for a real win-back
-    offer via a manual /winback/run call."""
+def _make_member_for_export(client, headers, merchant_id, email="export@example.com"):
     member = Member(
         merchant_id=merchant_id,
-        first_name="Stale",
+        first_name="Export",
         last_name="Member",
         email=email,
         points_balance=250,
         tier="bronze",
-        last_activity_at=datetime.now(timezone.utc) - timedelta(days=days_inactive),
+        last_activity_at=datetime.now(timezone.utc),
     )
-    db_session.add(member)
-    db_session.commit()
-    db_session.refresh(member)
     return member
 
 
-def test_gdpr_export_includes_winback_offers_and_experiment_assignments(client, db_session, admin_headers):
-    """TEST_REPORT_BATCH3.md §2 (HIGH): the export previously omitted both
-    win-back offers and A/B-experiment assignments even though both tables
-    hold real personal data about the member (which reward they were
-    comped, at what churn score, and which experiment arm they're in).
-    Grants a real win-back offer AND a real experiment assignment for the
-    same member, then asserts both show up in the export with correct
-    field values."""
+def test_gdpr_export_includes_experiment_assignments(client, db_session, admin_headers):
+    """TEST_REPORT_BATCH3.md §2 (HIGH): the export previously omitted
+    A/B-experiment assignments even though the table holds real personal
+    data about the member (which experiment arm they're in). Creates a
+    real experiment assignment and asserts it shows up in the export.
+
+    No win-back coverage here anymore: win-back was reworked into a
+    read-only worklist (see app/services/winback.py) that persists nothing
+    about a member, so there's no win-back personal data to export."""
     merchant_id = client.get("/api/v1/auth/me", headers=admin_headers).json()["merchant_id"]
 
-    # -- Real win-back offer: rule + a churn-eligible ("stale") member + a
-    # manual run, exactly the flow test_winback.py exercises. --
-    winback_reward_resp = client.post(
-        "/api/v1/rewards",
-        json={"name": "Winback Reward", "points_cost": 150, "tier_required": "bronze"},
-        headers=admin_headers,
-    )
-    assert winback_reward_resp.status_code == 201
-    winback_reward_id = winback_reward_resp.json()["id"]
-
-    member = _make_stale_member(db_session, merchant_id)
-
-    rule_resp = client.put(
-        "/api/v1/winback/rule",
-        json={
-            "enabled": True,
-            "churn_risk_threshold": 65.0,
-            "reward_id": winback_reward_id,
-            "auto_trigger": False,
-        },
-        headers=admin_headers,
-    )
-    assert rule_resp.status_code == 200
-
-    run_resp = client.post("/api/v1/winback/run", headers=admin_headers)
-    assert run_resp.status_code == 200
-    assert run_resp.json()["offers_sent"] == 1
-    assert run_resp.json()["member_ids"] == [member.id]
+    member = _make_member_for_export(client, admin_headers, merchant_id)
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
 
     # -- Real A/B experiment assignment for the same member. This merchant
     # has exactly one member (created directly above, not via the API), so
@@ -294,19 +265,13 @@ def test_gdpr_export_includes_winback_offers_and_experiment_assignments(client, 
     )
     assert assignment is not None  # sanity: the only member in this merchant must be assigned
 
-    # -- The export must surface both. --
+    # -- The export must surface it, and must NOT include a winback_offers
+    # field anymore (the field was removed in the win-back rework). --
     export_resp = client.get(f"/api/v1/members/{member.id}/gdpr-export", headers=admin_headers)
     assert export_resp.status_code == 200
     body = export_resp.json()
 
-    assert "winback_offers" in body
-    assert len(body["winback_offers"]) == 1
-    offer = body["winback_offers"][0]
-    assert offer["member_id"] == member.id
-    assert offer["triggered_by"] == "manual"
-    assert offer["churn_risk_score_at_trigger"] >= 65.0
-    assert offer["redemption_id"]
-
+    assert "winback_offers" not in body
     assert "experiment_assignments" in body
     assert len(body["experiment_assignments"]) == 1
     exported_assignment = body["experiment_assignments"][0]

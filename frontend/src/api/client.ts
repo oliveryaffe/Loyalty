@@ -448,7 +448,9 @@ export function updateNotificationSettings(
 }
 
 // ---------------------------------------------------------------------
-// Win-back campaigns (Batch 3 §4)
+// Win-back worklist -- reworked from an auto-executing campaign into a
+// read-only suggestion list (see backend/app/services/winback.py). No
+// more "run", no more offer history, no more auto_trigger.
 // ---------------------------------------------------------------------
 
 export interface WinbackRuleOut {
@@ -457,32 +459,22 @@ export interface WinbackRuleOut {
   enabled: boolean;
   churn_risk_threshold: number;
   reward_id: string | null;
-  auto_trigger: boolean;
-  created_at: string | null;
-  updated_at: string | null;
 }
 
 export interface WinbackRuleIn {
   enabled: boolean;
   churn_risk_threshold: number;
   reward_id: string;
-  auto_trigger: boolean;
 }
 
-export interface WinbackRunResult {
-  offers_sent: number;
-  member_ids: string[];
-}
-
-export interface WinbackOfferOut {
-  id: string;
-  merchant_id: string;
+export interface WinbackWorklistEntry {
   member_id: string;
-  rule_id: string;
-  redemption_id: string;
-  churn_risk_score_at_trigger: number;
-  triggered_by: string;
-  created_at: string;
+  first_name: string;
+  last_name: string;
+  churn_risk_score: number;
+  risk_band: string;
+  suggested_reward_id: string | null;
+  suggested_reward_name: string | null;
 }
 
 export function getWinbackRule(): Promise<WinbackRuleOut> {
@@ -496,12 +488,8 @@ export function saveWinbackRule(payload: WinbackRuleIn): Promise<WinbackRuleOut>
   });
 }
 
-export function runWinback(): Promise<WinbackRunResult> {
-  return request<WinbackRunResult>("/winback/run", { method: "POST" });
-}
-
-export function listWinbackOffers(): Promise<WinbackOfferOut[]> {
-  return request<WinbackOfferOut[]>("/winback/offers");
+export function getWinbackWorklist(): Promise<WinbackWorklistEntry[]> {
+  return request<WinbackWorklistEntry[]>("/winback/worklist");
 }
 
 // ---------------------------------------------------------------------

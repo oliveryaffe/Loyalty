@@ -327,16 +327,23 @@ class BillingEvent(Base):
 
 
 class WinbackRule(Base):
-    """One rule per merchant (PLAN_BATCH3.md §4) -- deliberate MVP
-    simplicity, not a multi-rule campaign builder. `unique=True` on
-    merchant_id is the enforced guarantee of "one rule", not just app-level
-    convention. `churn_risk_threshold` defaults to
-    app.ai.churn_model.RISK_BAND_MEDIUM_MAX (65.0), i.e. "high" band by
-    default. `auto_trigger` defaults to False -- see
-    app/services/winback.py::grant_winback_reward's docstring for why an
-    automatic free-reward giveaway must be an explicit merchant opt-in,
-    not a default-on behavior (same precedent as Batch 2's
-    `mint_points=false`).
+    """One reward preference per merchant, used by the win-back worklist
+    (app/services/winback.py::get_winback_worklist) to suggest what to
+    offer an at-risk member. `unique=True` on merchant_id enforces "one
+    preference per merchant", not a multi-rule campaign builder.
+    `churn_risk_threshold` defaults to app.ai.churn_model.RISK_BAND_MEDIUM_MAX
+    (65.0), i.e. "high" band by default.
+
+    REWORKED: this table originally drove an auto-executing campaign --
+    `enabled`/`auto_trigger` gated whether the app granted a free reward on
+    the merchant's behalf. That assumed Ledgerly was the merchant's system
+    of record for redemptions, which doesn't fit the insights-layer
+    positioning (a "completed" redemption the merchant's real POS and the
+    customer never saw was misleading). The worklist is now purely
+    read-only and doesn't grant anything, so `enabled` is now just "have I
+    configured a reward suggestion" and `auto_trigger` is unused/ignored by
+    the app -- left in place rather than dropped since this repo has no
+    migration tooling for column removal (see app/db/base.py::init_db).
 
     Brand-new table -- create_all handles it directly, zero migration risk."""
 
@@ -347,21 +354,20 @@ class WinbackRule(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     churn_risk_threshold: Mapped[float] = mapped_column(Float, default=65.0, nullable=False)
     reward_id: Mapped[str] = mapped_column(ForeignKey("reward_catalog_items.id"), nullable=False)
-    auto_trigger: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    auto_trigger: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # unused, see docstring
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class WinbackOffer(Base):
-    """Audit trail + the actual anti-repeat-offer guard (PLAN_BATCH3.md §4):
-    `unique=True` on member_id means a member can receive at most ONE
-    win-back offer, ever, for the lifetime of this MVP feature -- a
-    deliberately permanent (not time-windowed) "never re-offer" rule, see
-    the plan's explicit judgment call on this. The unique constraint is the
-    primary defense-in-depth guard against a double-offer race, not just
-    the eligibility query in app/services/winback.py.
-
-    Brand-new table -- create_all handles it directly, zero migration risk."""
+    """UNUSED as of the win-back rework -- nothing in the app writes to
+    this table anymore (see app/services/winback.py). Kept defined, not
+    dropped, because this repo has no migration tooling for table removal
+    (app/db/base.py::init_db only adds tables/columns, never drops them)
+    and dropping the class would orphan any rows already written by
+    earlier versions of this feature in production. New code should not
+    read or write this table -- the win-back worklist is computed live and
+    persists nothing."""
 
     __tablename__ = "winback_offers"
 

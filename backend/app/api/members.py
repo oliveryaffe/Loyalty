@@ -16,7 +16,6 @@ from app.db.models import (
     Redemption,
     TeamMember,
     Transaction,
-    WinbackOffer,
 )
 from app.schemas.gdpr import MemberErasureResult, MemberExportOut
 from app.schemas.member import MemberCreate, MemberOut, MemberWithChurn
@@ -180,7 +179,6 @@ def gdpr_export_member(
     transactions = db.query(Transaction).filter(Transaction.member_id == member.id).all()
     redemptions = db.query(Redemption).filter(Redemption.member_id == member.id).all()
     fraud_alerts = db.query(FraudAlert).filter(FraudAlert.member_id == member.id).all()
-    winback_offers = db.query(WinbackOffer).filter(WinbackOffer.member_id == member.id).all()
     experiment_assignments = (
         db.query(ExperimentAssignment).filter(ExperimentAssignment.member_id == member.id).all()
     )
@@ -190,7 +188,6 @@ def gdpr_export_member(
         transactions=transactions,
         redemptions=redemptions,
         fraud_alerts=fraud_alerts,
-        winback_offers=winback_offers,
         experiment_assignments=experiment_assignments,
         exported_at=datetime.now(timezone.utc),
     )

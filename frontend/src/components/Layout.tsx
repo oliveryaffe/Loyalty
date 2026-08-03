@@ -10,7 +10,6 @@ const NAV_ITEMS = [
   { to: "/fraud-alerts", label: "Fraud Alerts" },
   { to: "/insights", label: "Insights" },
   { to: "/winback", label: "Win-back" },
-  { to: "/experiments", label: "A/B Testing" },
   { to: "/settings", label: "Settings" },
   { to: "/billing", label: "Billing" },
 ];

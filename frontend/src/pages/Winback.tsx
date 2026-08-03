@@ -1,52 +1,49 @@
 import React, { useEffect, useState } from "react";
 
 import { isApiError } from "../AuthContext";
+import RiskBadge from "../components/RiskBadge";
 import {
-  listRewards,
-  listWinbackOffers,
   getWinbackRule,
+  getWinbackWorklist,
+  listRewards,
   RewardOut,
-  runWinback,
   saveWinbackRule,
-  WinbackOfferOut,
   WinbackRuleOut,
-  WinbackRunResult,
+  WinbackWorklistEntry,
 } from "../api/client";
-import { formatDateTimeUK } from "../utils";
 
 /**
- * Win-back campaigns (PLAN_BATCH3.md §4): one rule per merchant, a manual
- * "send offers now" trigger, and an optional auto-trigger piggybacking on
- * §3's escalation detection. Route /winback, per the plan's explicit
- * frontend spec.
+ * Win-back worklist: a read-only, computed-on-demand list of members at
+ * risk of leaving and what to consider offering them. Reworked from an
+ * auto-executing campaign feature -- Ledgerly never grants a reward or
+ * writes to any loyalty ledger itself; it only surfaces the suggestion.
+ * The merchant acts on it in whatever tool they already use to comp a
+ * reward (Square, Loyalzoo, Stamp Me, or their own system). Route
+ * /winback.
  */
 export default function Winback() {
   const [rewards, setRewards] = useState<RewardOut[] | null>(null);
   const [rule, setRule] = useState<WinbackRuleOut | null>(null);
-  const [offers, setOffers] = useState<WinbackOfferOut[] | null>(null);
+  const [worklist, setWorklist] = useState<WinbackWorklistEntry[] | null>(null);
 
   const [enabled, setEnabled] = useState(false);
   const [rewardId, setRewardId] = useState("");
   const [threshold, setThreshold] = useState(65);
-  const [autoTrigger, setAutoTrigger] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [runResult, setRunResult] = useState<WinbackRunResult | null>(null);
 
   function load() {
     setLoading(true);
-    Promise.all([listRewards(), getWinbackRule(), listWinbackOffers()])
-      .then(([rewardsList, ruleOut, offersList]) => {
+    Promise.all([listRewards(), getWinbackRule(), getWinbackWorklist()])
+      .then(([rewardsList, ruleOut, worklistEntries]) => {
         setRewards(rewardsList);
         setRule(ruleOut);
-        setOffers(offersList);
+        setWorklist(worklistEntries);
         setEnabled(ruleOut.enabled);
         setRewardId(ruleOut.reward_id ?? (rewardsList[0]?.id ?? ""));
         setThreshold(ruleOut.churn_risk_threshold);
-        setAutoTrigger(ruleOut.auto_trigger);
       })
       .catch((err) => setError(isApiError(err) ? err.message : "Unable to load win-back settings."))
       .finally(() => setLoading(false));
@@ -63,52 +60,24 @@ export default function Winback() {
         enabled,
         churn_risk_threshold: threshold,
         reward_id: rewardId,
-        auto_trigger: autoTrigger,
       });
       setRule(saved);
+      const worklistEntries = await getWinbackWorklist();
+      setWorklist(worklistEntries);
     } catch (err) {
-      setError(isApiError(err) ? err.message : "Unable to save the win-back rule.");
+      setError(isApiError(err) ? err.message : "Unable to save the win-back preference.");
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleRunNow() {
-    setError(null);
-    setRunResult(null);
-    setRunning(true);
-    try {
-      const result = await runWinback();
-      setRunResult(result);
-      const offersList = await listWinbackOffers();
-      setOffers(offersList);
-    } catch (err) {
-      setError(isApiError(err) ? err.message : "Unable to run win-back offers.");
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  const rewardNameById = Object.fromEntries((rewards ?? []).map((r) => [r.id, r.name]));
-
-  // WinbackOfferOut only carries `rule_id` (not `reward_id` directly, since
-  // the underlying WinbackOffer/WinbackRule tables don't duplicate it) --
-  // resolve a display name for the common case (the offer was sent under
-  // the currently-saved rule); older offers from a rule that's since been
-  // edited just show a generic label rather than a stale/misleading name.
-  function rewardNameForOffer(offer: WinbackOfferOut): string {
-    if (rule?.id && offer.rule_id === rule.id && rule.reward_id) {
-      return rewardNameById[rule.reward_id] ?? "—";
-    }
-    return "(rule since updated)";
-  }
-
   return (
     <div>
-      <h2>Win-back Campaigns</h2>
-      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8 }}>
-        Automatically comp a reward to members whose churn risk crosses your threshold. Rewards are granted for
-        free (no points debited) and each member is offered at most once, ever.
+      <h2>Win-back Worklist</h2>
+      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8, maxWidth: 640 }}>
+        Members whose churn risk crosses your threshold, ranked highest-risk first. This is a suggestion list,
+        not an automation -- Ledgerly doesn't grant rewards or touch any loyalty ledger. Comp the suggested
+        reward yourself in whatever system you already use (Square, Loyalzoo, Stamp Me, or your own).
       </p>
       {error && <p className="error-text">{error}</p>}
 
@@ -122,7 +91,7 @@ export default function Winback() {
             style={{ marginBottom: 24, display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr", maxWidth: 640 }}
           >
             <div className="field" style={{ gridColumn: "1 / -1" }}>
-              <label>Reward to offer</label>
+              <label>Reward to suggest</label>
               <select value={rewardId} onChange={(e) => setRewardId(e.target.value)} required>
                 <option value="" disabled>
                   Select a reward...
@@ -148,66 +117,44 @@ export default function Winback() {
             <div style={{ display: "flex", flexDirection: "column", gap: 10, justifyContent: "center" }}>
               <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, color: "var(--text-secondary)" }}>
                 <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-                Enabled
-              </label>
-              <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, color: "var(--text-secondary)" }}>
-                <input type="checkbox" checked={autoTrigger} onChange={(e) => setAutoTrigger(e.target.checked)} />
-                Auto-send when a member escalates to high risk
+                Show a suggested reward on the worklist
               </label>
             </div>
             <div style={{ gridColumn: "1 / -1", display: "flex", gap: 12, alignItems: "center" }}>
               <button className="primary" style={{ width: "auto", padding: "8px 20px" }} type="submit" disabled={saving || !rewardId}>
-                {saving ? "Saving..." : "Save rule"}
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={handleRunNow}
-                disabled={running || !rule?.enabled}
-                title={!rule?.enabled ? "Save an enabled rule first" : undefined}
-              >
-                {running ? "Sending..." : "Send win-back offers now"}
+                {saving ? "Saving..." : "Save preference"}
               </button>
             </div>
             <p className="hint" style={{ gridColumn: "1 / -1", marginTop: 0 }}>
-              Auto-trigger is off by default -- with it off, offers are only ever sent when you click "Send
-              win-back offers now" above, even if members cross the threshold.
+              The worklist below always shows who's at risk, even without a saved preference -- this form only
+              controls which reward gets suggested alongside each name.
             </p>
           </form>
 
-          {runResult && (
-            <div className="upload-banner" style={{ maxWidth: 640 }}>
-              <strong>Run complete.</strong> {runResult.offers_sent} offer(s) sent
-              {runResult.member_ids.length > 0 ? ` to ${runResult.member_ids.length} member(s).` : "."}
-            </div>
-          )}
-
-          <h3 style={{ marginTop: 32 }}>Offer history</h3>
-          {offers === null || offers.length === 0 ? (
-            <p className="empty">No win-back offers sent yet.</p>
+          <h3 style={{ marginTop: 32 }}>At risk right now</h3>
+          {worklist === null || worklist.length === 0 ? (
+            <p className="empty">No members currently above the threshold.</p>
           ) : (
             <table>
               <thead>
                 <tr>
                   <th>Member</th>
-                  <th>Reward</th>
-                  <th>Churn score at trigger</th>
-                  <th>Triggered by</th>
-                  <th>Sent</th>
+                  <th>Churn risk</th>
+                  <th>Risk band</th>
+                  <th>Suggested reward</th>
                 </tr>
               </thead>
               <tbody>
-                {offers.map((o) => (
-                  <tr key={o.id}>
-                    <td>{o.member_id.slice(0, 8)}</td>
-                    <td>{rewardNameForOffer(o)}</td>
-                    <td>{o.churn_risk_score_at_trigger.toFixed(1)}</td>
+                {worklist.map((entry) => (
+                  <tr key={entry.member_id}>
                     <td>
-                      <span className={`badge ${o.triggered_by === "auto" ? "badge-medium" : "badge-low"}`}>
-                        {o.triggered_by}
-                      </span>
+                      {entry.first_name} {entry.last_name}
                     </td>
-                    <td>{formatDateTimeUK(o.created_at)}</td>
+                    <td>{entry.churn_risk_score.toFixed(1)}</td>
+                    <td>
+                      <RiskBadge band={entry.risk_band} />
+                    </td>
+                    <td>{entry.suggested_reward_name ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>

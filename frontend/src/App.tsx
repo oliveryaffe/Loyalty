@@ -6,7 +6,6 @@ import Layout from "./components/Layout";
 import { SubscriptionGate } from "./components/SubscriptionGate";
 import Billing from "./pages/Billing";
 import Dashboard from "./pages/Dashboard";
-import Experiments from "./pages/Experiments";
 import FraudAlerts from "./pages/FraudAlerts";
 import Insights from "./pages/Insights";
 import Login from "./pages/Login";
@@ -51,7 +50,6 @@ function AppRoutes() {
         <Route path="fraud-alerts" element={<FraudAlerts />} />
         <Route path="insights" element={<Insights />} />
         <Route path="winback" element={<Winback />} />
-        <Route path="experiments" element={<Experiments />} />
         <Route path="settings" element={<Settings />} />
         <Route path="billing" element={<Billing />} />
       </Route>

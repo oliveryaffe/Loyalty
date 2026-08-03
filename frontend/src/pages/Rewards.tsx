@@ -50,15 +50,22 @@ export default function Rewards() {
 
   return (
     <div>
-      <h2>Reward Catalog</h2>
+      <h2>Recommendation Categories</h2>
+      <p style={{ color: "#94a3b8", fontSize: 13, maxWidth: 640, marginTop: -8, marginBottom: 20 }}>
+        This isn't a separate rewards system to run -- it's what powers the AI's
+        suggestions on the Insights page (which offer to recommend for which member).
+        Mirror the tiers and point costs from whatever loyalty program you already
+        run (Square, Loyalzoo, Stamp Me, or your own) so the recommendations line up
+        with what you can actually redeem.
+      </p>
       {error && <p className="error-text">{error}</p>}
 
       <div className="toolbar">
         <span style={{ fontSize: 13, color: "#94a3b8" }}>
-          {rewards ? `${rewards.length} rewards` : ""}
+          {rewards ? `${rewards.length} categories` : ""}
         </span>
         <button className="primary" style={{ width: "auto", padding: "8px 16px" }} onClick={() => setShowForm((v) => !v)}>
-          {showForm ? "Cancel" : "+ New Reward"}
+          {showForm ? "Cancel" : "+ New Category"}
         </button>
       </div>
 
@@ -114,7 +121,7 @@ export default function Rewards() {
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <button className="primary" type="submit" disabled={submitting}>
-              {submitting ? "Saving..." : "Save Reward"}
+              {submitting ? "Saving..." : "Save Category"}
             </button>
           </div>
         </form>
@@ -123,7 +130,7 @@ export default function Rewards() {
       {rewards === null ? (
         <p className="loading">Loading rewards...</p>
       ) : rewards.length === 0 ? (
-        <p className="empty">No rewards yet.</p>
+        <p className="empty">No recommendation categories yet.</p>
       ) : (
         <table>
           <thead>

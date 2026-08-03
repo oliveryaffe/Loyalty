@@ -1,12 +1,14 @@
 """AI capability endpoints: recommendations, churn, fraud alerts.
 
-PLAN_BATCH3.md §3/§4: `GET /churn` and `GET /fraud-alerts` are also where
-notifications (Slack/email on churn escalation + new fraud alerts) and
-win-back's auto-trigger path are wired in -- there is no scheduler in this
-codebase, so both piggyback on these existing request-triggered recompute
-paths (see app/services/notifications.py and app/services/winback.py for
-the full rationale). Delivery itself happens via FastAPI `BackgroundTasks`
-so a slow/down Slack endpoint never delays these responses.
+PLAN_BATCH3.md §3: `GET /churn` and `GET /fraud-alerts` are also where
+notifications (Slack/email on churn escalation + new fraud alerts) are
+wired in -- there is no scheduler in this codebase, so notification
+delivery piggybacks on these existing request-triggered recompute paths
+(see app/services/notifications.py for the full rationale). Delivery
+itself happens via FastAPI `BackgroundTasks` so a slow/down Slack endpoint
+never delays these responses. Win-back (app/services/winback.py) is a
+separate, read-only worklist computed on demand at GET /winback/worklist
+-- it doesn't hook into this recompute path at all anymore.
 """
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -25,8 +27,6 @@ from app.services.notifications import (
     wants_churn_notifications,
     wants_fraud_notifications,
 )
-from app.services.winback import maybe_auto_trigger_winback
-
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 
 
@@ -68,20 +68,16 @@ def get_churn_scores(
 
     # PLAN_BATCH3.md §3: transition-detect newly-escalated-to-high members
     # (dedup/cooldown handled inside check_churn_escalations) and, if any,
-    # notify (batched, one message per request) and -- §4's explicit
-    # dependency on this same signal -- offer win-back's auto-trigger path
-    # a shot at the same list.
+    # notify (batched, one message per request). Win-back no longer has
+    # an auto-trigger path (see app/services/winback.py) -- it's now a
+    # read-only worklist computed on demand at GET /winback/worklist.
     escalated = check_churn_escalations(db, merchant, results)
-    if escalated:
-        if wants_churn_notifications(merchant):
-            subject = f"{len(escalated)} member(s) just escalated to high churn risk"
-            body = format_member_bullet_list(
-                [f"{m.first_name} {m.last_name}" for m in escalated]
-            )
-            notify_merchant(merchant, subject, body, background_tasks)
-
-        score_by_member_id = {r.member_id: r.churn_risk_score for r in results}
-        maybe_auto_trigger_winback(db, merchant, escalated, score_by_member_id)
+    if escalated and wants_churn_notifications(merchant):
+        subject = f"{len(escalated)} member(s) just escalated to high churn risk"
+        body = format_member_bullet_list(
+            [f"{m.first_name} {m.last_name}" for m in escalated]
+        )
+        notify_merchant(merchant, subject, body, background_tasks)
 
     db.commit()
 

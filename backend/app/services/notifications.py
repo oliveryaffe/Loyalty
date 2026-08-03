@@ -9,14 +9,12 @@ load), delivery uses FastAPI's built-in `BackgroundTasks` -- the HTTP
 response returns immediately after the DB transition-detection below, and
 the actual Slack POST / SMTP send happens after the response is sent.
 
-`check_churn_escalations` is deliberately generic in naming/placement: it's
-consumed both by this feature's own churn-notification path
-(app/api/ai.py::get_churn_scores) and by §4's win-back automation
-(app/services/winback.py::maybe_auto_trigger_winback), which needs the
-exact same "who just crossed into high risk this request" signal. If this
-feels mis-named once win-back is read alongside it, a trivial rename to
-app/services/churn_triggers.py is a non-functional cleanup, not a redesign
-(flagged the same way in the plan).
+`check_churn_escalations` is consumed by this feature's own
+churn-notification path (app/api/ai.py::get_churn_scores). It previously
+also fed §4's win-back auto-trigger; win-back was later reworked into a
+read-only worklist (app/services/winback.py) that no longer hooks into
+this signal at all -- this function's naming/placement predates that
+rework and is unchanged by it.
 """
 from __future__ import annotations
 

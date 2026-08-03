@@ -3,7 +3,9 @@ import { Link } from "react-router-dom";
 
 import {
   FraudAlertOut,
+  FutureValueOut,
   getFraudAlerts,
+  getFutureValue,
   listMembers,
   listTransactions,
   MemberWithChurn,
@@ -15,6 +17,7 @@ export default function Dashboard() {
   const [members, setMembers] = useState<MemberWithChurn[] | null>(null);
   const [transactions, setTransactions] = useState<TransactionOut[] | null>(null);
   const [alerts, setAlerts] = useState<FraudAlertOut[] | null>(null);
+  const [futureValue, setFutureValue] = useState<FutureValueOut[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,12 +26,14 @@ export default function Dashboard() {
       listMembers(true),
       listTransactions(undefined, 10),
       getFraudAlerts(true),
+      getFutureValue(90),
     ])
-      .then(([m, t, a]) => {
+      .then(([m, t, a, fv]) => {
         if (cancelled) return;
         setMembers(m);
         setTransactions(t);
         setAlerts(a);
+        setFutureValue(fv);
       })
       .catch((err) => !cancelled && setError(String(err)));
     return () => {
@@ -36,9 +41,13 @@ export default function Dashboard() {
     };
   }, []);
 
-  const loading = members === null || transactions === null || alerts === null;
+  const loading = members === null || transactions === null || alerts === null || futureValue === null;
 
-  const totalPoints = members?.reduce((sum, m) => sum + m.points_balance, 0) ?? 0;
+  // Leads with the insight, not an operational balance -- the total
+  // predicted 90-day value across the book is "how much is at stake",
+  // which is a more useful headline number than a raw points balance
+  // that may not even match a member's real loyalty-app account.
+  const totalFutureValue = futureValue?.reduce((sum, r) => sum + r.predicted_future_value, 0) ?? 0;
   const highRiskCount =
     members?.filter((m) => m.churn_risk_band === "high").length ?? 0;
   const unresolvedAlerts = alerts?.filter((a) => !a.resolved).length ?? 0;
@@ -57,8 +66,8 @@ export default function Dashboard() {
               <div className="value">{members!.length}</div>
             </div>
             <div className="card">
-              <div className="label">Points Outstanding</div>
-              <div className="value">{totalPoints.toLocaleString()}</div>
+              <div className="label">Predicted 90-Day Value</div>
+              <div className="value">{formatGBP(totalFutureValue)}</div>
             </div>
             <div className="card">
               <div className="label">High Churn Risk</div>
