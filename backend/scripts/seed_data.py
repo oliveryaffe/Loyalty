@@ -31,6 +31,8 @@ from app.db.models import (  # noqa: E402
     Merchant,
     Redemption,
     RewardCatalogItem,
+    TeamMember,
+    TeamRole,
     Transaction,
     TransactionType,
 )
@@ -40,6 +42,10 @@ SEED = 42
 NUM_MEMBERS = 620
 DEMO_MERCHANT_EMAIL = "demo@merchant.com"
 DEMO_MERCHANT_PASSWORD = "demo1234"
+DEMO_TEAM_MEMBER_EMAIL = "demo-member@merchant.com"
+DEMO_TEAM_MEMBER_PASSWORD = "demo1234"
+DEMO_SHOPIFY_WEBHOOK_SECRET = "demo-shopify-secret-change-me"
+DEMO_SHOPIFY_SHOP_DOMAIN = "northwind-coffee-demo.myshopify.com"
 
 REWARD_CATALOG = [
     # (name, category, points_cost, tier_required)
@@ -242,10 +248,26 @@ def seed(reset: bool = True) -> None:
     try:
         merchant = Merchant(
             business_name="Northwind Coffee Co.",
-            email=DEMO_MERCHANT_EMAIL,
-            hashed_password=hash_password(DEMO_MERCHANT_PASSWORD),
+            shopify_webhook_secret=DEMO_SHOPIFY_WEBHOOK_SECRET,
+            shopify_shop_domain=DEMO_SHOPIFY_SHOP_DOMAIN,
         )
         db.add(merchant)
+        db.flush()
+
+        admin_team_member = TeamMember(
+            merchant_id=merchant.id,
+            email=DEMO_MERCHANT_EMAIL,
+            hashed_password=hash_password(DEMO_MERCHANT_PASSWORD),
+            role=TeamRole.ADMIN.value,
+        )
+        member_team_member = TeamMember(
+            merchant_id=merchant.id,
+            email=DEMO_TEAM_MEMBER_EMAIL,
+            hashed_password=hash_password(DEMO_TEAM_MEMBER_PASSWORD),
+            role=TeamRole.MEMBER.value,
+        )
+        db.add(admin_team_member)
+        db.add(member_team_member)
         db.flush()
 
         rewards = make_rewards(db, merchant)
@@ -341,9 +363,15 @@ def seed(reset: bool = True) -> None:
         db.commit()
         print(f"Created {redemption_count} completed redemptions.")
 
-        print("\nDemo merchant login:")
+        print("\nDemo merchant admin login:")
         print(f"  email:    {DEMO_MERCHANT_EMAIL}")
         print(f"  password: {DEMO_MERCHANT_PASSWORD}")
+        print("\nDemo merchant non-admin (role=member) login:")
+        print(f"  email:    {DEMO_TEAM_MEMBER_EMAIL}")
+        print(f"  password: {DEMO_TEAM_MEMBER_PASSWORD}")
+        print("\nDemo Shopify webhook config (for scripts/send_sample_shopify_webhook.py):")
+        print(f"  merchant_id: {merchant.id}")
+        print(f"  secret:      {DEMO_SHOPIFY_WEBHOOK_SECRET}")
         print("\nSeed complete.")
     except Exception:
         db.rollback()
@@ -359,6 +387,29 @@ def _tier_ok(member_tier: str, required_tier: str) -> bool:
     return _TIER_RANK.get(member_tier, 0) >= _TIER_RANK.get(required_tier, 0)
 
 
+def seed_if_empty() -> None:
+    """Idempotent bootstrap mode for container startup (Feature 1): create
+    any missing tables (non-destructive), then only run the full synthetic
+    seed if the merchants table is empty. A no-op against a database that
+    already has data -- this is what makes redeploys/restarts against a
+    persistent Postgres volume safe (they no longer wipe real data), while
+    still auto-seeding on a genuinely fresh/empty database.
+    """
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        existing = db.query(Merchant).first()
+    finally:
+        db.close()
+
+    if existing is not None:
+        print("Database already has data (a Merchant row exists) -- --seed-if-empty is a no-op.")
+        return
+
+    print("Database is empty -- running initial synthetic seed...")
+    seed(reset=False)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Seed the loyalty DB with synthetic data.")
     parser.add_argument(
@@ -366,5 +417,18 @@ if __name__ == "__main__":
         action="store_true",
         help="Don't drop existing tables first (default is to reset for a clean, reproducible seed).",
     )
+    parser.add_argument(
+        "--seed-if-empty",
+        action="store_true",
+        help=(
+            "Idempotent bootstrap mode: create missing tables and seed only if the "
+            "merchants table is empty; otherwise no-op. Safe to run on every container "
+            "start (see backend/Dockerfile / README Postgres section). Mutually exclusive "
+            "in effect with --no-reset (this flag never drops existing tables)."
+        ),
+    )
     args = parser.parse_args()
-    seed(reset=not args.no_reset)
+    if args.seed_if_empty:
+        seed_if_empty()
+    else:
+        seed(reset=not args.no_reset)

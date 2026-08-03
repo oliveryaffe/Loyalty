@@ -1,0 +1,46 @@
+{
+  "id": 820982911946154508,
+  "order_number": 1001,
+  "email": "jon.snow@example.com",
+  "created_at": "2026-07-15T09:00:00-04:00",
+  "total_price": "49.95",
+  "subtotal_price": "44.95",
+  "total_tax": "5.00",
+  "currency": "USD",
+  "financial_status": "paid",
+  "confirmed": true,
+  "customer": {
+    "id": 115310627314723954,
+    "email": "jon.snow@example.com",
+    "first_name": "Jon",
+    "last_name": "Snow",
+    "orders_count": 3,
+    "state": "enabled"
+  },
+  "line_items": [
+    {
+      "id": 866550311766439020,
+      "title": "Cold Brew Coffee Bag (12oz)",
+      "quantity": 2,
+      "price": "14.95",
+      "sku": "CB-12OZ"
+    },
+    {
+      "id": 141249953214522921,
+      "title": "House Blend Espresso (1lb)",
+      "quantity": 1,
+      "price": "20.05",
+      "sku": "ESP-1LB"
+    }
+  ],
+  "billing_address": {
+    "city": "Winterfell",
+    "province": "The North",
+    "country": "United States"
+  },
+  "shipping_address": {
+    "city": "Winterfell",
+    "province": "The North",
+    "country": "United States"
+  }
+}

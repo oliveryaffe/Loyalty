@@ -46,20 +46,53 @@ class MemberTier(str, enum.Enum):
     PLATINUM = "platinum"
 
 
+class TeamRole(str, enum.Enum):
+    ADMIN = "admin"
+    MEMBER = "member"
+
+
 class Merchant(Base):
-    """A B2B customer (retailer) account. Merchant admins log in with these
-    credentials to reach the dashboard."""
+    """A B2B customer (retailer) account -- a pure business entity. Login
+    credentials live on TeamMember (see below), not here: a Merchant can
+    have multiple human users (team members) with different roles."""
 
     __tablename__ = "merchants"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     business_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    # Shopify webhook ingestion config (Feature 2). Per-merchant secret,
+    # not a single global secret -- different merchants would have
+    # different Shopify apps/secrets in production.
+    shopify_webhook_secret: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    shopify_shop_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     members: Mapped[list["Member"]] = relationship(back_populates="merchant")
     rewards: Mapped[list["RewardCatalogItem"]] = relationship(back_populates="merchant")
+    team_members: Mapped[list["TeamMember"]] = relationship(
+        back_populates="merchant", cascade="all, delete-orphan"
+    )
+
+
+class TeamMember(Base):
+    """A human user who can log in to a Merchant's dashboard. Not to be
+    confused with `Member`, which means "end loyalty-program shopper" in
+    this codebase. Multiple TeamMembers can belong to one Merchant, with
+    different roles (admin/member)."""
+
+    __tablename__ = "team_members"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    merchant_id: Mapped[str] = mapped_column(ForeignKey("merchants.id"), nullable=False, index=True)
+
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), default=TeamRole.MEMBER.value, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    merchant: Mapped["Merchant"] = relationship(back_populates="team_members")
 
 
 class Member(Base):
@@ -125,6 +158,28 @@ class Transaction(Base):
     points: Mapped[int] = mapped_column(Integer, nullable=False)  # signed: + earn, - redeem
     channel: Mapped[str] = mapped_column(String(30), default="pos")  # pos, online, mobile
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+    # Shopify webhook ingestion (Feature 2). external_order_id is Shopify's
+    # own order `id`, used for idempotency/dedup on webhook redelivery.
+    # source distinguishes manual POST /transactions calls from
+    # webhook-ingested ones. Both nullable/defaulted so no existing row is
+    # invalidated by this addition.
+    #
+    # `unique=True`: a plain SELECT-then-INSERT idempotency check (as
+    # app/services/shopify.py used to rely on exclusively) is a TOCTOU race
+    # -- two concurrent deliveries of the same webhook can both pass the
+    # "does a Transaction with this external_order_id already exist?" check
+    # before either commits. The DB-level UNIQUE constraint is the actual
+    # source of truth for dedup; app/services/shopify.py catches the
+    # resulting IntegrityError and treats it as "already processed". NULL
+    # values (regular non-webhook transactions) are not considered
+    # duplicates of each other by any standard SQL UNIQUE constraint
+    # (Postgres and SQLite both treat NULL <> NULL for uniqueness), so this
+    # is safe for the many Transaction rows that have no external_order_id.
+    external_order_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
+    source: Mapped[str] = mapped_column(String(30), default="manual", nullable=False)
 
     # Synthetic-data-only marker: was this transaction deliberately injected
     # as a fraud-like pattern by the seed script? Used only by tests to

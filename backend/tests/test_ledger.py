@@ -16,7 +16,7 @@ from app.services.ledger import (
 
 @pytest.fixture()
 def merchant(db_session):
-    m = Merchant(business_name="Test Co", email="owner@test.co", hashed_password="x")
+    m = Merchant(business_name="Test Co")
     db_session.add(m)
     db_session.flush()
     return m

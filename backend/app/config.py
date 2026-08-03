@@ -5,6 +5,7 @@ No secrets are committed: JWT_SECRET_KEY has a dev default but should be
 overridden via the JWT_SECRET_KEY env var (or a `.env` file, see .env.example)
 in any shared/deployed environment.
 """
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +16,22 @@ class Settings(BaseSettings):
     # Postgres DSN (e.g. postgresql+psycopg2://user:pass@host/db) for a real
     # deployment -- SQLAlchemy models are portable, no SQLite-only features used.
     database_url: str = "sqlite:///./loyalty.db"
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_db_url(cls, v: str) -> str:
+        """Rewrite Railway/Heroku-style `postgres://` (and bare
+        `postgresql://`) DSNs to `postgresql+psycopg2://` -- SQLAlchemy 2.x
+        rejects the bare `postgres://` scheme, and Railway's Postgres plugin
+        injects DATABASE_URL in that exact form. SQLite URLs and DSNs that
+        already specify a driver (`postgresql+psycopg2://`, etc.) pass
+        through unchanged.
+        """
+        if v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+psycopg2://", 1)
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return v
 
     jwt_secret_key: str = "dev-only-insecure-secret-change-me"
     jwt_algorithm: str = "HS256"

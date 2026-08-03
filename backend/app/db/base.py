@@ -16,7 +16,11 @@ connect_args = (
     {"check_same_thread": False, "timeout": 30} if settings.database_url.startswith("sqlite") else {}
 )
 
-engine = create_engine(settings.database_url, connect_args=connect_args)
+# pool_pre_ping: harmless for SQLite, important for Postgres -- Railway's
+# managed Postgres can silently drop idle connections, and without
+# pre-ping the next request would get a raw OperationalError instead of a
+# clean reconnect.
+engine = create_engine(settings.database_url, connect_args=connect_args, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -33,8 +37,12 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """Create all tables. Fine for MVP/SQLite; a real deployment would use
-    Alembic migrations instead."""
+    """Create all (missing) tables -- non-destructive, only adds tables that
+    don't already exist. Fine for MVP/SQLite and for the clean-cutover
+    assumption Postgres is brought up under (Batch 1); a real deployment
+    with evolving schema requirements would eventually move to Alembic
+    migrations instead (explicitly deferred, not forgotten -- see
+    PLAN_BATCH1.md Feature 1)."""
     from app.db import models  # noqa: F401  (ensure models are registered)
 
     Base.metadata.create_all(bind=engine)

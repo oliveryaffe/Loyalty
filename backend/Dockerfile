@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python scripts/seed_data.py && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "python scripts/seed_data.py --seed-if-empty && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

@@ -8,7 +8,7 @@ OpenAPI/Swagger docs auto-generated at /docs (see PLAN.md P3 acceptance item).
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, auth, members, rewards, transactions
+from app.api import ai, auth, members, rewards, team, transactions, webhooks
 from app.config import settings
 from app.db.base import init_db
 
@@ -45,3 +45,5 @@ app.include_router(members.router)
 app.include_router(transactions.router)
 app.include_router(rewards.router)
 app.include_router(ai.router)
+app.include_router(team.router)
+app.include_router(webhooks.router)

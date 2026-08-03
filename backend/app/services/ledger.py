@@ -69,6 +69,23 @@ def earn_points(
     """Record a purchase and credit points to the member's balance.
 
     Returns the created Transaction. Caller is responsible for db.commit().
+
+    Concurrency note: this used to do a Python-level read-modify-write
+    (`member.points_balance += points`), which is a classic lost-update
+    race -- two concurrent earn calls for the same member (e.g. duplicate
+    Shopify webhook redeliveries racing each other, or any two concurrent
+    earn events) can both read the same starting balance before either
+    writes its increment, silently dropping one of the credits. This
+    mirrors the exact bug shape `redeem_reward()` below was hardened
+    against. Fixed the same way: the credit is applied via a single atomic
+    `UPDATE members SET points_balance = points_balance + :points WHERE id
+    = :id` (SQL-side addition, computed and applied entirely inside the
+    database), so two concurrent increments for the same row both durably
+    apply -- the database's row-level locking serializes the two UPDATEs
+    instead of one clobbering the other's read. Unlike `redeem_reward()`,
+    there's no upper-bound WHERE condition needed here (earning points is
+    never rejected for "too much balance"), but the addition itself must
+    still happen atomically in SQL, not in Python.
     """
     if not member.is_active:
         raise InactiveMemberError(f"Member {member.id} is not active")
@@ -84,11 +101,24 @@ def earn_points(
     if occurred_at is not None:
         txn.created_at = occurred_at
 
-    member.points_balance += points
-    member.last_activity_at = occurred_at or datetime.now(timezone.utc)
+    activity_ts = occurred_at or datetime.now(timezone.utc)
+
+    result = db.execute(
+        update(Member)
+        .where(Member.id == member.id)
+        .values(points_balance=Member.points_balance + points, last_activity_at=activity_ts)
+    )
+    if result.rowcount == 0:
+        raise LedgerError(f"Member {member.id} not found for points credit")
 
     db.add(txn)
     db.flush()
+
+    # Sync the in-memory ORM object with the value the atomic UPDATE just
+    # wrote (the UPDATE above went through Core and bypasses the ORM's
+    # identity-map attribute tracking) -- same reasoning as redeem_reward()
+    # below.
+    db.refresh(member)
     return txn
 
 

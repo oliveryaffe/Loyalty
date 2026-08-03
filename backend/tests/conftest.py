@@ -71,6 +71,19 @@ def demo_credentials():
     return {"email": DEMO_MERCHANT_EMAIL, "password": DEMO_MERCHANT_PASSWORD}
 
 
+@pytest.fixture()
+def seeded_client():
+    """A TestClient that does NOT override get_db -- requests hit the real,
+    shared on-disk seeded SQLite DB (same one `seeded_db` reads from) via
+    the app's normal SessionLocal. Intended for read-only regression checks
+    (e.g. logging in as a seeded account and hitting GET endpoints) --
+    mutating requests here would leak state across tests/files since the
+    seed only runs once per session.
+    """
+    with TestClient(app) as c:
+        yield c
+
+
 # ---------------------------------------------------------------------------
 # Isolated in-memory DB for tests that want a clean slate.
 # ---------------------------------------------------------------------------
