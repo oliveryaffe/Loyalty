@@ -54,7 +54,7 @@ export default function Rewards() {
       {error && <p className="error-text">{error}</p>}
 
       <div className="toolbar">
-        <span style={{ fontSize: 13, color: "#6b6f8d" }}>
+        <span style={{ fontSize: 13, color: "#94a3b8" }}>
           {rewards ? `${rewards.length} rewards` : ""}
         </span>
         <button className="primary" style={{ width: "auto", padding: "8px 16px" }} onClick={() => setShowForm((v) => !v)}>
@@ -143,7 +143,7 @@ export default function Rewards() {
                   {r.description && (
                     <>
                       <br />
-                      <span style={{ fontSize: 12, color: "#6b6f8d" }}>{r.description}</span>
+                      <span style={{ fontSize: 12, color: "#94a3b8" }}>{r.description}</span>
                     </>
                   )}
                 </td>

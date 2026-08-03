@@ -101,7 +101,12 @@ COHORT_WEIGHTS = [
     ("loyal", 0.15),
     ("lapsing", 0.15),
     ("at_risk", 0.15),
-    ("average", 0.55),
+    ("new_member", 0.03),  # Batch 2: genuinely brand-new members, no activity older than ~35 days --
+    # exercises app/ai/future_value.py's per-member heuristic fallback path (a member with zero
+    # pre-cutoff earn activity relative to HOLDOUT_DAYS=45) out of the box, with no upload needed.
+    # Carved out of "average" below (0.55 -> 0.52) so loyal/lapsing/at_risk (and their existing
+    # test assertions in test_churn_model.py) are unaffected.
+    ("average", 0.52),
 ]
 
 
@@ -134,6 +139,14 @@ def cohort_purchase_plan(cohort: str, rng: random.Random, now: datetime) -> tupl
         last_activity_days_ago = rng.randint(45, 80)
         span_days = 90
         amount_range = (10.0, 70.0)
+    elif cohort == "new_member":
+        # All activity within the last ~35 days -- well inside any
+        # reasonable backtest cutoff, so this cohort has zero pre-cutoff
+        # earn history (see COHORT_WEIGHTS comment above).
+        num_txns = rng.randint(1, 3)
+        last_activity_days_ago = rng.randint(0, 15)
+        span_days = 20
+        amount_range = (10.0, 50.0)
     else:  # average
         num_txns = rng.randint(6, 16)
         last_activity_days_ago = rng.randint(3, 40)
@@ -149,6 +162,10 @@ def build_member(fake: Faker, merchant: Merchant, cohort: str) -> Member:
     tier = random.choices(
         ["bronze", "silver", "gold", "platinum"], weights=[0.5, 0.3, 0.15, 0.05]
     )[0]
+    # new_member cohort: joined recently too (not just "transacted
+    # recently") -- consistent with the plan's "very recently joined
+    # synthetic member" framing for the future-value heuristic fallback.
+    joined_days_ago = random.randint(5, 40) if cohort == "new_member" else random.randint(30, 500)
     return Member(
         merchant_id=merchant.id,
         first_name=first,
@@ -157,7 +174,7 @@ def build_member(fake: Faker, merchant: Merchant, cohort: str) -> Member:
         tier=tier,
         points_balance=0,
         synthetic_cohort=cohort,
-        joined_at=utc_now() - timedelta(days=random.randint(30, 500)),
+        joined_at=utc_now() - timedelta(days=joined_days_ago),
         last_activity_at=utc_now(),
     )
 

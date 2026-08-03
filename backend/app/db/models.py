@@ -186,6 +186,17 @@ class Transaction(Base):
     # measure detector recall/precision -- never fed to the detector itself.
     synthetic_fraud_label: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Product-level detail (Batch 2, PLAN_BATCH2.md §1). Nullable/additive --
+    # same clean-cutover reasoning as external_order_id/source above, no
+    # migration needed. Populated by the CSV upload path
+    # (app/services/csv_ingest.py); ordinary manual/Shopify-ingested
+    # transactions leave both null. Kept directly on Transaction rather than
+    # a separate product table -- see PLAN_BATCH2.md §1 for the full
+    # rationale (one purchase event = one row, no multi-line-item orders in
+    # scope, avoids a second ledger to reconcile).
+    product_category: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    product_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+
     member: Mapped["Member"] = relationship(back_populates="transactions")
     fraud_alerts: Mapped[list["FraudAlert"]] = relationship(back_populates="transaction")
 

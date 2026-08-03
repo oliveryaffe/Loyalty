@@ -70,7 +70,7 @@ export default function FraudAlerts() {
               <tr key={a.id}>
                 <td>{a.member_id.slice(0, 8)}</td>
                 <td>{a.reason}</td>
-                <td style={{ fontSize: 12, color: "#6b6f8d" }}>{a.details}</td>
+                <td style={{ fontSize: 12, color: "#94a3b8" }}>{a.details}</td>
                 <td>
                   <span className={`badge badge-${riskLevel(a.score)}`}>
                     {a.score.toFixed(2)}

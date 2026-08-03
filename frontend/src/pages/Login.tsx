@@ -37,8 +37,12 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Loyalty AI Framework</h1>
-        <p className="subtitle">Merchant admin dashboard login</p>
+        <div className="sidebar-brand" style={{ marginBottom: 16 }}>
+          <div className="brand-mark">L</div>
+          <span className="brand-word">Ledgerly</span>
+        </div>
+        <h1>Merchant Dashboard</h1>
+        <p className="subtitle">Sign in to manage your loyalty program</p>
 
         <form onSubmit={handleSubmit}>
           <div className="field">

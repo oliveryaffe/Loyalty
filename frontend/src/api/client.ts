@@ -284,3 +284,117 @@ export function getMemberChurn(memberId: string): Promise<ChurnScoreOut> {
 export function getFraudAlerts(refresh = true): Promise<FraudAlertOut[]> {
   return request<FraudAlertOut[]>(`/ai/fraud-alerts?refresh=${refresh}`);
 }
+
+// ---------------------------------------------------------------------
+// Insights (Batch 2): future value, next-best-product, CSV upload/export
+// ---------------------------------------------------------------------
+
+export interface FutureValueOut {
+  member_id: string;
+  first_name: string;
+  last_name: string;
+  horizon_days: number;
+  predicted_future_value: number;
+  model_used: "trained" | "heuristic";
+  avg_order_value: number;
+  monthly_purchase_rate: number;
+}
+
+export interface NextBestOut {
+  category: string;
+  product_name: string | null;
+  score: number;
+  reason: string;
+  data_granularity: "product" | "category";
+}
+
+export interface InsightsUploadRowError {
+  row: number;
+  reason: string;
+}
+
+export interface InsightsUploadResult {
+  rows_received: number;
+  rows_ingested: number;
+  rows_skipped_duplicate: number;
+  rows_failed: number;
+  members_created: number;
+  errors: InsightsUploadRowError[];
+}
+
+export function getFutureValue(horizonDays = 90): Promise<FutureValueOut[]> {
+  return request<FutureValueOut[]>(`/insights/future-value?horizon_days=${horizonDays}`);
+}
+
+export function getFutureValueForMember(
+  memberId: string,
+  horizonDays = 90
+): Promise<FutureValueOut> {
+  return request<FutureValueOut>(
+    `/insights/future-value/${memberId}?horizon_days=${horizonDays}`
+  );
+}
+
+export function getNextBestProduct(memberId: string, topN = 3): Promise<NextBestOut[]> {
+  return request<NextBestOut[]>(`/insights/next-best-product/${memberId}?top_n=${topN}`);
+}
+
+// Not built on top of request() -- this is the first multipart/form-data
+// call in this client (every other call sends a JSON body). FormData needs
+// the browser to set its own `Content-Type: multipart/form-data;
+// boundary=...` header, so we can't reuse request()'s
+// always-set-Content-Type-to-json behavior here.
+export async function uploadInsightsCsv(
+  file: File,
+  mintPoints = false
+): Promise<InsightsUploadResult> {
+  const token = getToken();
+  const form = new FormData();
+  form.append("file", file);
+
+  const res = await fetch(
+    `${API_BASE_URL}/insights/upload?mint_points=${mintPoints}`,
+    {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    }
+  );
+
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = body.detail ?? JSON.stringify(body);
+    } catch {
+      // ignore -- no JSON body
+    }
+    throw new ApiError(res.status, typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return (await res.json()) as InsightsUploadResult;
+}
+
+// report.csv needs the Authorization header, so it can't be a plain
+// <a href> link (JWT isn't a cookie in this app) -- fetch as a blob and
+// trigger a synthetic download instead.
+export async function downloadInsightsReport(horizonDays = 90): Promise<void> {
+  const token = getToken();
+  const res = await fetch(
+    `${API_BASE_URL}/insights/report.csv?horizon_days=${horizonDays}`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }
+  );
+  if (!res.ok) {
+    throw new ApiError(res.status, res.statusText);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "future_value_report.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

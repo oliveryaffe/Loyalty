@@ -1,0 +1,43 @@
+customer_email,customer_first_name,customer_last_name,transaction_date,amount_usd,product_category,product_name,channel,external_order_id
+blairamanda@example.com,Melanie,Munoz,2026-05-20T06:00:00,3.95,bakery,Blueberry Muffin,online,CSV-DEMO-0006
+john21@example.net,Danielle,Johnson,2026-05-21T14:00:00,25.21,merchandise,Travel Tumbler,pos,CSV-DEMO-0031
+blairamanda@example.com,Melanie,Munoz,2026-05-21T20:00:00,5.70,beverage,Cold Brew 16oz,mobile,CSV-DEMO-0036
+curtis61@example.com,Matthew,Moore,2026-05-21T21:00:00,22.35,merchandise,Travel Tumbler,pos,CSV-DEMO-0005
+fjohnson@example.org,Joy,Gardner,2026-05-24T21:00:00,16.68,grocery,Espresso Roast Bag 12oz,mobile,CSV-DEMO-0008
+blairamanda@example.com,Melanie,Munoz,2026-05-26T13:00:00,3.52,bakery,Almond Croissant,pos,CSV-DEMO-0042
+john21@example.net,Danielle,Johnson,2026-05-30T22:00:00,24.35,merchandise,Travel Tumbler,pos,CSV-DEMO-0025
+curtis61@example.com,Matthew,Moore,2026-06-01T02:00:00,14.96,merchandise,Ceramic Mug,pos,CSV-DEMO-0041
+jennifermiles@example.com,Jesse,Guzman,2026-06-05T15:00:00,17.59,grocery,Espresso Roast Bag 12oz,mobile,CSV-DEMO-0021
+jennifermiles@example.com,Jesse,Guzman,2026-06-09T13:00:00,3.78,bakery,Almond Croissant,mobile,CSV-DEMO-0027
+jennifermiles@example.com,Jesse,Guzman,2026-06-11T12:00:00,3.89,bakery,Almond Croissant,pos,CSV-DEMO-0033
+john21@example.net,Danielle,Johnson,2026-06-12T04:00:00,15.79,merchandise,Ceramic Mug,pos,CSV-DEMO-0001
+blakeerik@example.com,Jeffrey,Lawrence,2026-06-15T21:00:00,3.64,bakery,Blueberry Muffin,mobile,CSV-DEMO-0010
+blairamanda@example.com,Melanie,Munoz,2026-06-18T05:00:00,13.36,merchandise,Ceramic Mug,online,CSV-DEMO-0018
+blakeerik@example.com,Jeffrey,Lawrence,2026-06-19T00:00:00,27.32,merchandise,Travel Tumbler,online,CSV-DEMO-0022
+blairamanda@example.com,Melanie,Munoz,2026-06-22T10:00:00,3.93,bakery,Almond Croissant,mobile,CSV-DEMO-0012
+fjohnson@example.org,Joy,Gardner,2026-06-24T08:00:00,14.33,grocery,Whole Bean Bag 12oz,online,CSV-DEMO-0014
+jennifermiles@example.com,Jesse,Guzman,2026-06-26T05:00:00,14.92,merchandise,Ceramic Mug,pos,CSV-DEMO-0015
+blairamanda@example.com,Melanie,Munoz,2026-06-27T00:00:00,3.18,bakery,Blueberry Muffin,pos,CSV-DEMO-0030
+fjohnson@example.org,Joy,Gardner,2026-06-27T20:00:00,20.41,merchandise,Northwind Tote,online,CSV-DEMO-0026
+fjohnson@example.org,Joy,Gardner,2026-06-30T13:00:00,3.38,bakery,Blueberry Muffin,mobile,CSV-DEMO-0038
+john21@example.net,Danielle,Johnson,2026-07-01T19:00:00,20.17,merchandise,Northwind Tote,mobile,CSV-DEMO-0013
+blakeerik@example.com,Jeffrey,Lawrence,2026-07-02T22:00:00,24.51,merchandise,Travel Tumbler,mobile,CSV-DEMO-0004
+curtis61@example.com,Matthew,Moore,2026-07-04T00:00:00,5.35,beverage,Oat Milk Latte,online,CSV-DEMO-0029
+jennifermiles@example.com,Jesse,Guzman,2026-07-05T23:00:00,7.32,beverage,Cold Brew 16oz,pos,CSV-DEMO-0003
+curtis61@example.com,Matthew,Moore,2026-07-06T09:00:00,5.63,beverage,Pour Over Single Origin,mobile,CSV-DEMO-0011
+jennifermiles@example.com,Jesse,Guzman,2026-07-09T21:00:00,17.24,grocery,Espresso Roast Bag 12oz,mobile,CSV-DEMO-0009
+blakeerik@example.com,Jeffrey,Lawrence,2026-07-11T14:00:00,5.52,beverage,Pour Over Single Origin,pos,CSV-DEMO-0016
+blakeerik@example.com,Jeffrey,Lawrence,2026-07-13T22:00:00,27.75,merchandise,Travel Tumbler,pos,CSV-DEMO-0028
+blairamanda@example.com,Melanie,Munoz,2026-07-16T01:00:00,17.07,grocery,Whole Bean Bag 12oz,pos,CSV-DEMO-0024
+curtis61@example.com,Matthew,Moore,2026-07-18T09:00:00,12.67,merchandise,Ceramic Mug,pos,CSV-DEMO-0023
+jennifermiles@example.com,Jesse,Guzman,2026-07-18T09:00:00,13.90,merchandise,Ceramic Mug,online,CSV-DEMO-0039
+curtis61@example.com,Matthew,Moore,2026-07-18T14:00:00,15.76,grocery,Whole Bean Bag 12oz,mobile,CSV-DEMO-0035
+fjohnson@example.org,Joy,Gardner,2026-07-20T13:00:00,6.14,beverage,Pour Over Single Origin,mobile,CSV-DEMO-0002
+blakeerik@example.com,Jeffrey,Lawrence,2026-07-22T20:00:00,20.90,merchandise,Northwind Tote,pos,CSV-DEMO-0040
+curtis61@example.com,Matthew,Moore,2026-07-23T07:00:00,20.53,merchandise,Northwind Tote,mobile,CSV-DEMO-0017
+john21@example.net,Danielle,Johnson,2026-07-24T22:00:00,3.80,bakery,Blueberry Muffin,online,CSV-DEMO-0019
+fjohnson@example.org,Joy,Gardner,2026-07-24T23:00:00,22.18,merchandise,Northwind Tote,mobile,CSV-DEMO-0020
+blakeerik@example.com,Jeffrey,Lawrence,2026-07-25T18:00:00,21.81,merchandise,Northwind Tote,pos,CSV-DEMO-0034
+fjohnson@example.org,Joy,Gardner,2026-07-26T10:00:00,4.45,bakery,Almond Croissant,mobile,CSV-DEMO-0032
+john21@example.net,Danielle,Johnson,2026-07-27T07:00:00,7.45,beverage,Cold Brew 16oz,pos,CSV-DEMO-0007
+john21@example.net,Danielle,Johnson,2026-07-29T22:00:00,6.40,beverage,Pour Over Single Origin,pos,CSV-DEMO-0037

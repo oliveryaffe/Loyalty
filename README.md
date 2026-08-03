@@ -60,10 +60,13 @@ cd backend
 python3 -m pytest -q
 ```
 
-67 tests: the original 42 (ledger math incl. a concurrency regression test —
-see §6a, transaction validation, all three AI modules against deterministic
-seeded/fixture data) plus Batch 1 additions — DB URL normalization (5),
-Shopify webhook ingestion (8), and multi-user team accounts/roles (12).
+114 tests: the 69 from Batch 1 (ledger math incl. concurrency regression
+tests, transaction validation, all three original AI modules, DB URL
+normalization, Shopify webhook ingestion, multi-user team accounts/roles)
+plus 45 new Batch 2 tests — CSV ingestion (`test_csv_ingest.py`), the
+future-value model (`test_future_value.py`), the next-best-product model
+(`test_next_best_product.py`), and the `insights` API surface
+(`test_insights_api.py`).
 
 ### Backend environment variables
 
@@ -146,6 +149,106 @@ endpoints only.
 
 ---
 
+## 2b. Batch 2 additions (future value, next-best-product, CSV upload)
+
+**New `insights` API surface** (`app/api/insights.py`, prefix
+`/api/v1/insights`, JWT-protected same as `ai.py`):
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/v1/insights/upload` | `POST` | CSV upload, `multipart/form-data` field `file`, `?mint_points=false` (default) |
+| `/api/v1/insights/future-value` | `GET` | All members, `?horizon_days=90` (default) |
+| `/api/v1/insights/future-value/{member_id}` | `GET` | Single member, `404` if not found/wrong merchant |
+| `/api/v1/insights/next-best-product/{member_id}` | `GET` | `?top_n=3` (default), `404` if not found |
+| `/api/v1/insights/report.csv` | `GET` | Combined future-value + next-best-product export, one row per member |
+
+**Predicted future value** (`app/ai/future_value.py`). A backtested
+`sklearn.linear_model.Ridge` regression: features (recency/frequency/
+monetary/avg-order-value/tenure/tier, reusing `churn_model`'s RFM
+definitions) are computed from data *before* a `cutoff = now - 45 days`,
+labeled with each member's *actual* realized spend in the 45 days after
+that cutoff (a real backtest, not a fabricated label), then scored against
+each member's full history at request time. Falls back to a documented
+heuristic (`avg_order_value x monthly purchase rate x horizon x
+churn-risk-damped retention adjustment`) per-member when a member has no
+pre-cutoff purchase history, or merchant-wide when there are fewer than 30
+eligible members to train on. Every response says which path produced it
+(`model_used: "trained" | "heuristic"`) — this is an honestly-framed MVP
+backtest against synthetic single-period data, not a production CLV model
+(see the module docstring for the full framing, matching `churn_model.py`'s
+existing "deliberately not overselling this" style).
+
+**Next-best-product** (`app/ai/next_best_product.py`). Item-based
+collaborative filtering over a member x category affinity matrix
+(cosine similarity between categories, "similarity-weighted sum of what a
+member already engages with"). Uses uploaded `Transaction.product_category`
+data if any exists for the merchant (`data_granularity: "product"`,
+surfaces a real representative `product_name`); otherwise degrades
+gracefully to the existing `Redemption` x `RewardCatalogItem.category` data
+the seeded demo already has (`data_granularity: "category"`,
+`product_name: null`). Cold-start members with no history at all fall back
+to global category popularity.
+
+**CSV upload** (`POST /api/v1/insights/upload`). Header row required,
+columns case-insensitive/order-independent:
+
+| Column | Required | Notes |
+|---|---|---|
+| `customer_email` | yes | Matched against `Member.email`; auto-creates a new `Member` if not found |
+| `customer_first_name` / `customer_last_name` | no | Only used when creating a new member; default `"Unknown"`/`"Customer"` |
+| `transaction_date` | yes | ISO 8601 (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`) |
+| `amount_usd` | yes | `0 < amount_usd <= max_transaction_amount_usd` |
+| `product_category` | no | Free text, max 60 chars |
+| `product_name` | no | Free text, max 150 chars |
+| `channel` | no | `pos` / `online` / `mobile`, defaults to `pos` |
+| `external_order_id` | no | If present, re-uploading the same file is idempotent (duplicate rows are skipped, not re-ingested) |
+
+File-level problems (not a `.csv`, empty, missing a required header, >20,000
+rows) reject the whole upload with `422` and ingest nothing. Row-level
+problems (bad date, bad amount, bad email) skip just that row and are
+reported in the response body (`errors: [{row, reason}]`, 1-based row
+numbers including the header) — one bad row never aborts the rest of the
+file.
+
+**Uploaded rows do NOT mint loyalty points by default**
+(`mint_points=false`). They become real `Transaction` rows — so they feed
+the future-value/next-best-product models and RFM — but
+`Member.points_balance` is left untouched, because uploaded data is treated
+as historical backfill, not a new live purchase. Pass `?mint_points=true`
+to also credit real points via the normal `earn_points()` ledger path, for
+the less common case of uploading genuinely new, not-yet-ledgered
+purchases.
+
+**Demo path — works with zero upload.** Both `future-value` and
+`next-best-product` return real, non-degenerate results against the 620
+seeded members out of the box (the seed script's `new_member` cohort — ~17
+of the 620 — deliberately has no purchase history older than 45 days, so
+the future-value heuristic fallback path is genuinely exercised alongside
+the trained path, not just theoretical). To see the CSV upload path and the
+`next-best-product` "category" → "product" granularity flip:
+
+```bash
+cd backend
+python3 scripts/send_sample_csv_upload.py \
+    --base-url http://127.0.0.1:8000 \
+    --merchant-email demo@merchant.com \
+    --merchant-password demo1234
+```
+
+This uploads `scripts/fixtures/sample_product_transactions.csv` (42 rows,
+Northwind-Coffee-themed products against 6 real seeded member emails) and
+prints the `InsightsUploadResult` summary. Re-running it is a no-op
+(idempotent via `external_order_id`). Pass `--mint-points` to also credit
+real points for the upload.
+
+**Frontend**: new `/insights` page — sortable table (name, tier, predicted
+90-day future value with a trained/heuristic badge, next-best category/
+product), an upload button (with a "mint points" checkbox), and a
+"Download report" button that fetches `report.csv` as an authenticated
+blob download.
+
+---
+
 ## 3. Frontend setup
 
 ```bash
@@ -155,10 +258,12 @@ npm run dev       # http://localhost:5173, proxies /api -> http://127.0.0.1:8000
 ```
 
 Log in with the demo merchant credentials above (pre-filled on the login
-screen). The dashboard has four pages: **Dashboard** (overview cards +
+screen). The dashboard has five pages: **Dashboard** (overview cards +
 recent activity), **Members** (sortable list incl. churn-risk score/badge,
 click a row for AI reward recommendations), **Rewards** (catalog + create
-new reward), and **Fraud Alerts** (anomaly feed with re-scan button).
+new reward), **Fraud Alerts** (anomaly feed with re-scan button), and
+**Insights** (Batch 2 — predicted future value + next-best-product per
+member, CSV upload, CSV report download).
 
 ### Build for production
 
@@ -224,18 +329,19 @@ loyalty-ai-framework/
 │   ├── app/
 │   │   ├── main.py, config.py
 │   │   ├── db/ (base.py, models.py)
-│   │   ├── api/ (auth, members, transactions, rewards, ai, deps)
-│   │   ├── ai/ (recommender, churn_model, fraud_detector)
-│   │   ├── schemas/ (auth, member, reward, transaction, ai)
-│   │   └── services/ (ledger, security)
-│   ├── scripts/seed_data.py
-│   └── tests/ (42 tests, all passing)
+│   │   ├── api/ (auth, members, transactions, rewards, ai, team, webhooks, insights, deps)
+│   │   ├── ai/ (recommender, churn_model, fraud_detector, future_value, next_best_product)
+│   │   ├── schemas/ (auth, member, reward, transaction, ai, shopify, insights)
+│   │   └── services/ (ledger, security, shopify, csv_ingest)
+│   ├── scripts/ (seed_data.py, send_sample_shopify_webhook.py, send_sample_csv_upload.py,
+│   │             fixtures/shopify_order_create_sample.json, fixtures/sample_product_transactions.csv)
+│   └── tests/ (114 tests, all passing)
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx, AuthContext.tsx, main.tsx, index.css
 │   │   ├── api/client.ts        # typed REST client
 │   │   ├── components/ (Layout, RiskBadge)
-│   │   └── pages/ (Dashboard, Members, Rewards, FraudAlerts, Login)
+│   │   └── pages/ (Dashboard, Members, Rewards, FraudAlerts, Insights, Login)
 │   └── dist/ (build output, gitignored)
 └── README.md (this file)
 ```
@@ -397,6 +503,68 @@ Two critical bugs from the Batch 1 tester's report (`TEST_REPORT_BATCH1.md`
 Both fixes are covered by the full backend test suite (69/69 passing: the
 67 from the Batch 1 tester's fresh run plus the 2 new concurrency tests
 above).
+
+**Deviations from PLAN_BATCH2.md (this batch's own plan doc,
+`PLAN_BATCH2.md`):**
+
+- **`compute_future_value_features` does not literally call
+  `churn_model.compute_rfm(now=cutoff)` during training**, despite the
+  plan's prose saying to reuse "compute_rfm's exact recency/frequency/
+  monetary definitions". `compute_rfm` has no upper-bound time filter (its
+  `window_start` is a lower bound only, and its recency figure always uses
+  `member.last_activity_at`, the member's true present-day last activity,
+  not their activity "as of" an earlier cutoff) — calling it with
+  `now=cutoff` at training time would leak post-cutoff transactions into
+  supposedly pre-cutoff features, exactly the label leakage a backtest
+  exists to prevent. `app/ai/future_value.py`'s `_rfm_as_of` reimplements
+  the same recency/frequency/monetary *formula* (same `LOOKBACK_DAYS`
+  window, same "earn transactions only" definition) but properly bounded
+  to `created_at <= as_of`. At prediction time (`as_of=now`) this is
+  equivalent to `compute_rfm`, and `compute_rfm`/`score_member_churn` are
+  called directly for the heuristic fallback, exactly as the plan
+  describes. See the module docstring for the full explanation.
+- **`app/schemas/insights.py`'s `FutureValueOut` has no `model_quality`
+  field.** The plan's prose in §3 step 2 mentions logging R²/MAE "for the
+  response payload's `model_quality` field", but the literal schema block
+  in §5 (which is what other parts of the plan call "exact API endpoints")
+  does not include one. Implemented the literal schema as written; R²/MAE
+  are still computed internally (`FutureValueModel.r2`/`.mae` in
+  `future_value.py`) for potential future use/logging, just not exposed
+  over the API.
+- **`scripts/seed_data.py` gained a small new `"new_member"` synthetic
+  cohort (~3% of members, carved out of the `"average"` cohort's weight,
+  loyal/lapsing/at_risk unchanged).** The plan's §6 demo-path claim — "any
+  member with zero pre-cutoff activity ... both paths are exercised by the
+  seed data as-is" — turned out to be false against the actual Batch 1 seed
+  data once implemented and tested: every existing cohort's transaction
+  history spans widely enough (and cohorts like `lapsing`/`at_risk` are
+  deliberately *all* old) that, empirically, zero members organically
+  landed with all-activity-inside-the-last-45-days (verified by running
+  `score_all_members_future_value` against the original seed data before
+  this change: 620/620 came back `"trained"`, 0 `"heuristic"`). Since
+  acceptance criterion 1 explicitly requires both `model_used` values to
+  appear in the out-of-the-box seeded response, and getting the demo path
+  actually working (not just claimed) is this project's stated bar, a
+  small cohort of genuinely brand-new members (joined 5-40 days ago, 1-3
+  purchases all within the last ~35 days) was added so the heuristic
+  fallback is genuinely, not theoretically, exercised. Verified live: 620
+  members score with a 603/17 trained/heuristic split, matching the new
+  cohort size. `test_churn_model.py`'s existing loyal/lapsing cohort-size
+  assertions (`> 20` each) still pass comfortably (88/107 members).
+- **The Insights page's Tier column is populated via a second call to the
+  existing `GET /members` endpoint**, merged client-side by `member_id`.
+  `FutureValueOut` (per the plan's own literal schema in §5) has no `tier`
+  field, but the plan's §7 frontend section calls for a Tier column and a
+  tier sort — implemented by fetching `listMembers()` alongside
+  `getFutureValue()` rather than dropping the column or leaving it fake.
+- **Next-best-product is not fetched eagerly for all 620 members up
+  front.** The plan's API surface (§5) deliberately has no merchant-wide
+  bulk endpoint for next-best-product (unlike future-value/churn, which
+  do) — firing 620 individual requests synchronously on page load would be
+  a poor demo experience. `Insights.tsx` renders the future-value table
+  immediately (one bulk call) and fills in the Next Best Category/Product
+  columns progressively via a bounded-concurrency (8 at a time) background
+  fetch loop, matching the per-member-only API shape the plan specifies.
 
 ---
 

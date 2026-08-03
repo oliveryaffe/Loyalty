@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { to: "/members", label: "Members" },
   { to: "/rewards", label: "Rewards" },
   { to: "/fraud-alerts", label: "Fraud Alerts" },
+  { to: "/insights", label: "Insights" },
 ];
 
 export default function Layout() {
@@ -16,11 +17,13 @@ export default function Layout() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <h1>
-          Loyalty AI
-          <br />
+        <div className="sidebar-brand">
+          <div className="brand-mark">L</div>
+          <span className="brand-word">Ledgerly</span>
+        </div>
+        <p className="sidebar-subtitle">
           {merchant?.business_name ?? "Merchant Dashboard"}
-        </h1>
+        </p>
         <nav>
           {NAV_ITEMS.map((item) => (
             <NavLink

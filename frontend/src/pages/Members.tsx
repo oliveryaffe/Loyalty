@@ -111,7 +111,7 @@ export default function Members() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <span style={{ fontSize: 13, color: "#6b6f8d" }}>
+        <span style={{ fontSize: 13, color: "#94a3b8" }}>
           {members ? `${filtered.length} of ${members.length} members` : ""}
         </span>
       </div>
@@ -166,7 +166,7 @@ export default function Members() {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(20,22,43,0.45)",
+            background: "rgba(11,14,20,0.75)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -203,7 +203,7 @@ export default function Members() {
                   <li key={r.reward_id} style={{ marginBottom: 8, fontSize: 14 }}>
                     <strong>{r.reward_name}</strong> — {r.points_cost} pts
                     <br />
-                    <span style={{ fontSize: 12, color: "#6b6f8d" }}>
+                    <span style={{ fontSize: 12, color: "#94a3b8" }}>
                       score {r.score.toFixed(2)} &middot; {r.reason}
                     </span>
                   </li>
