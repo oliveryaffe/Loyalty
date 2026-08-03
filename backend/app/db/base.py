@@ -1,8 +1,9 @@
 """SQLAlchemy engine/session/declarative-base setup."""
 import logging
 from collections.abc import Generator
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.schema import CreateColumn
 
@@ -82,6 +83,7 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _apply_column_renames()
     _sync_missing_columns()
+    _backfill_legacy_merchant_subscriptions()
 
 
 def _apply_column_renames() -> None:
@@ -145,3 +147,48 @@ def _sync_missing_columns() -> None:
                 column.name,
             )
             conn.exec_driver_sql(ddl)
+
+
+def _backfill_legacy_merchant_subscriptions() -> None:
+    """One-time, idempotent data backfill -- not a schema change, but the
+    same class of "existing production row doesn't match what new code
+    assumes" problem `_sync_missing_columns` exists for, just at the row
+    level instead of the column level.
+
+    Batch 3's billing gating (`require_active_subscription` in
+    app/api/deps.py) treats any `subscription_status` not in
+    {trialing, active, past_due} as hard-locked. `_sync_missing_columns`
+    adds the new `subscription_status` column as NULL for every row that
+    already existed before this migration -- which would have instantly
+    hard-locked the seeded demo merchant (and any other pre-Batch-3
+    merchant) the moment this deployed, since NULL isn't in that allowed
+    set. Every code path that creates a NEW merchant post-Batch-3 (signup
+    in app/api/auth.py, both seed_data.py paths) already sets an explicit
+    subscription_status -- so this only ever touches genuinely legacy
+    rows, and is a no-op (0 rows matched) on any database that doesn't
+    have one, including every fresh install and the test suite's SQLite
+    fixtures."""
+    inspector = inspect(engine)
+    if "merchants" not in inspector.get_table_names():
+        return
+    if "subscription_status" not in {c["name"] for c in inspector.get_columns("merchants")}:
+        return  # column itself doesn't exist yet on some other DB flavor/timing -- next run will catch it
+
+    far_future = datetime.now(timezone.utc) + timedelta(days=3650)
+    with engine.begin() as conn:
+        result = conn.execute(
+            text(
+                "UPDATE merchants SET subscription_status = 'active', "
+                "subscription_tier = COALESCE(subscription_tier, 'growth'), "
+                "subscription_current_period_end = COALESCE(subscription_current_period_end, :far_future) "
+                "WHERE subscription_status IS NULL"
+            ),
+            {"far_future": far_future},
+        )
+        if result.rowcount:
+            logger.warning(
+                "Legacy merchant backfill: granted 'active' subscription_status to "
+                "%d pre-existing merchant row(s) with no billing state, so Batch 3's "
+                "subscription gating doesn't lock out accounts that predate billing.",
+                result.rowcount,
+            )
