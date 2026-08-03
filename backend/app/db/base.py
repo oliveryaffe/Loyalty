@@ -84,6 +84,7 @@ def init_db() -> None:
     _apply_column_renames()
     _sync_missing_columns()
     _backfill_legacy_merchant_subscriptions()
+    _backfill_legacy_reward_catalog_currency()
 
 
 def _apply_column_renames() -> None:
@@ -190,5 +191,45 @@ def _backfill_legacy_merchant_subscriptions() -> None:
                 "Legacy merchant backfill: granted 'active' subscription_status to "
                 "%d pre-existing merchant row(s) with no billing state, so Batch 3's "
                 "subscription gating doesn't lock out accounts that predate billing.",
+                result.rowcount,
+            )
+
+
+def _backfill_legacy_reward_catalog_currency() -> None:
+    """One-time, idempotent data backfill for the same reason as
+    `_backfill_legacy_merchant_subscriptions`, just for reward catalog
+    text content instead of billing state.
+
+    The UK-localisation batch relabelled `REWARD_CATALOG` in
+    scripts/seed_data.py from `$5/$10/.../$100 Store Credit` to
+    `£5/£10/.../£100 Store Credit` -- but that only changes what a
+    *fresh* seed run produces. `seed_if_empty()` is a deliberate no-op
+    against a database that already has data (see its docstring), so
+    the `RewardCatalogItem` rows created by the original seed run kept
+    their old dollar-sign names/descriptions indefinitely -- confirmed
+    live on the deployed Rewards page after the currency rename had
+    otherwise fully shipped. `REPLACE(column, '$', '£')` is a plain SQL
+    built-in supported identically by both SQLite and Postgres, so this
+    needs no per-row Python loop. Scoped to rows that still contain a
+    literal '$' so it's a no-op after the first successful run, and a
+    no-op on any database seeded fresh post-rename (which never had a
+    '$' in these columns to begin with)."""
+    inspector = inspect(engine)
+    if "reward_catalog_items" not in inspector.get_table_names():
+        return
+
+    with engine.begin() as conn:
+        result = conn.execute(
+            text(
+                "UPDATE reward_catalog_items SET "
+                "name = REPLACE(name, '$', '£'), "
+                "description = REPLACE(description, '$', '£') "
+                "WHERE name LIKE '%$%' OR description LIKE '%$%'"
+            )
+        )
+        if result.rowcount:
+            logger.warning(
+                "Legacy reward-catalog backfill: relabelled %d reward(s) from "
+                "'$' to '£' in name/description (pre-dated the GBP currency rename).",
                 result.rowcount,
             )
