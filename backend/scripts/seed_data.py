@@ -47,26 +47,31 @@ DEMO_TEAM_MEMBER_PASSWORD = "demo1234"
 DEMO_SHOPIFY_WEBHOOK_SECRET = "demo-shopify-secret-change-me"
 DEMO_SHOPIFY_SHOP_DOMAIN = "northwind-coffee-demo.myshopify.com"
 
+# Points costs rescaled to match realistic coffee-shop transaction sizes
+# (points_per_pound=1.0, and a typical visit is ~£3-8, not the £15-90 the
+# ranges originally assumed -- see cohort_purchase_plan's docstring). Free
+# Coffee at 25 points now works out to roughly "every 5th coffee free",
+# a believable independent-cafe loyalty offer instead of ~50 visits.
 REWARD_CATALOG = [
     # (name, category, points_cost, tier_required)
-    ("£5 Store Credit", "gift-card", 500, "bronze"),
-    ("£10 Store Credit", "gift-card", 1000, "bronze"),
-    ("£25 Store Credit", "gift-card", 2500, "silver"),
-    ("£50 Store Credit", "gift-card", 5000, "gold"),
-    ("Free Coffee", "beverage", 150, "bronze"),
-    ("Free Pastry", "beverage", 250, "bronze"),
-    ("Branded Tote Bag", "apparel", 800, "bronze"),
-    ("Branded T-Shirt", "apparel", 1200, "silver"),
-    ("Branded Hoodie", "apparel", 2800, "silver"),
-    ("Wireless Earbuds", "electronics", 4500, "gold"),
-    ("Bluetooth Speaker", "electronics", 3500, "gold"),
-    ("Smart Watch", "electronics", 9000, "platinum"),
-    ("VIP Early Access Event", "experience", 2000, "silver"),
-    ("Private Shopping Session", "experience", 6000, "gold"),
+    ("£5 Store Credit", "gift-card", 50, "bronze"),
+    ("£10 Store Credit", "gift-card", 100, "bronze"),
+    ("£25 Store Credit", "gift-card", 250, "silver"),
+    ("£50 Store Credit", "gift-card", 500, "gold"),
+    ("Free Coffee", "beverage", 25, "bronze"),
+    ("Free Pastry", "beverage", 40, "bronze"),
+    ("Branded Tote Bag", "apparel", 80, "bronze"),
+    ("Branded T-Shirt", "apparel", 120, "silver"),
+    ("Branded Hoodie", "apparel", 280, "silver"),
+    ("Wireless Earbuds", "electronics", 450, "gold"),
+    ("Bluetooth Speaker", "electronics", 350, "gold"),
+    ("Smart Watch", "electronics", 900, "platinum"),
+    ("VIP Early Access Event", "experience", 200, "silver"),
+    ("Private Shopping Session", "experience", 600, "gold"),
     ("Birthday Bonus Points", "bonus", 0, "bronze"),
-    ("Double Points Weekend Pass", "bonus", 1500, "silver"),
-    ("£100 Store Credit", "gift-card", 10000, "platinum"),
-    ("Free Shipping (1 Year)", "perk", 3000, "silver"),
+    ("Double Points Weekend Pass", "bonus", 150, "silver"),
+    ("£100 Store Credit", "gift-card", 1000, "platinum"),
+    ("Free Shipping (1 Year)", "perk", 300, "silver"),
 ]
 
 
@@ -123,22 +128,30 @@ def pick_cohort(rng: random.Random) -> str:
 def cohort_purchase_plan(cohort: str, rng: random.Random, now: datetime) -> tuple[int, int, int, float, float]:
     """Return (num_txns, min_days_ago_span_start, days_since_last_activity,
     min_amount, max_amount) shaping how a member's earn history looks.
-    """
+
+    Amount ranges are calibrated for an independent coffee shop, not a
+    generic retailer: a typical visit is a coffee (~£3) or coffee + pastry
+    (~£5-8), occasionally a round for a small group (~£12-15). Values
+    above ~£15 are the exception, not the norm -- previously these ranged
+    up to £90 per transaction, which read as implausible for a single
+    coffee-shop visit and inflated every downstream number that derives
+    from amount_gbp (points balances, Future Value projections, avg order
+    value on the dashboard)."""
     if cohort == "loyal":
         num_txns = rng.randint(18, 35)
         last_activity_days_ago = rng.randint(0, 6)
         span_days = 150
-        amount_range = (15.0, 90.0)
+        amount_range = (2.80, 12.50)
     elif cohort == "lapsing":
         num_txns = rng.randint(2, 6)
         last_activity_days_ago = rng.randint(95, 220)
         span_days = 60  # all their activity clustered in an old window
-        amount_range = (10.0, 60.0)
+        amount_range = (2.50, 9.50)
     elif cohort == "at_risk":
         num_txns = rng.randint(4, 9)
         last_activity_days_ago = rng.randint(45, 80)
         span_days = 90
-        amount_range = (10.0, 70.0)
+        amount_range = (2.50, 9.50)
     elif cohort == "new_member":
         # All activity within the last ~35 days -- well inside any
         # reasonable backtest cutoff, so this cohort has zero pre-cutoff
@@ -146,12 +159,12 @@ def cohort_purchase_plan(cohort: str, rng: random.Random, now: datetime) -> tupl
         num_txns = rng.randint(1, 3)
         last_activity_days_ago = rng.randint(0, 15)
         span_days = 20
-        amount_range = (10.0, 50.0)
+        amount_range = (2.50, 8.50)
     else:  # average
         num_txns = rng.randint(6, 16)
         last_activity_days_ago = rng.randint(3, 40)
         span_days = 150
-        amount_range = (10.0, 80.0)
+        amount_range = (2.50, 11.00)
 
     return num_txns, last_activity_days_ago, span_days, amount_range[0], amount_range[1]
 
@@ -232,7 +245,10 @@ def inject_velocity_burst_fraud(member: Member, rng: random.Random, now: datetim
     txns = []
     for i in range(count):
         created_at = burst_start + timedelta(minutes=rng.uniform(0, 90) + i * 2)
-        amount = round(rng.uniform(8.0, 25.0), 2)
+        # Ordinary-sized purchases -- the anomaly signal here is velocity
+        # (many earn events packed into a short window), not amount, so
+        # these should look like normal coffee-shop transactions.
+        amount = round(rng.uniform(3.0, 12.0), 2)
         points = int(amount)
         txns.append(
             Transaction(
