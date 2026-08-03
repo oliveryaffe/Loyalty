@@ -11,7 +11,7 @@ so a slow/down Slack endpoint never delays these responses.
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.ai.churn_model import score_all_members, score_member_churn
+from app.ai.churn_model import compute_merchant_calibration, score_all_members, score_member_churn
 from app.ai.fraud_detector import run_fraud_detection
 from app.ai.recommender import recommend_for_member
 from app.api.deps import require_active_subscription
@@ -113,7 +113,8 @@ def get_member_churn(
     )
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found")
-    r = score_member_churn(db, member)
+    calibration = compute_merchant_calibration(db, merchant.id)
+    r = score_member_churn(db, member, calibration=calibration)
     return ChurnScoreOut(
         member_id=r.member_id,
         first_name=r.first_name,

@@ -36,12 +36,25 @@ activity, not their activity "as of" some earlier cutoff). Calling it with
 `now=cutoff` at training time would leak post-cutoff transactions into the
 supposedly pre-cutoff features -- exactly the kind of label leakage a
 backtest exists to prevent. `_rfm_as_of` below reimplements the same
-recency/frequency/monetary *formula* (same LOOKBACK_DAYS window, same
+recency/frequency/monetary *formula* (same lookback window, same
 "earn transactions only" definition) but properly bounded to data with
 `created_at <= as_of`, so the backtest is actually valid. At *prediction*
 time (as_of=now, no cutoff involved) this function and `compute_rfm` are
 equivalent, and `compute_rfm`/`score_member_churn` are called directly
 where used (the heuristic fallback), exactly as the plan describes.
+
+Per-merchant calibration (added after shipping): HOLDOUT_DAYS and the
+lookback window used to both come from fixed module constants, same
+coffee-shop-tuned-by-default problem as churn_model.py's original
+thresholds -- a 45-day holdout is plenty of time to observe several
+purchase cycles for a coffee shop, and nowhere near enough for a barber on
+a 5-week cycle. Both now come from `churn_model.MerchantCalibration`,
+derived once per request from the merchant's own data (see
+churn_model.py's module docstring) and threaded through every function
+below via an explicit `calibration` parameter, defaulting to
+`DEFAULT_CALIBRATION` (the original fixed values) wherever a caller
+doesn't supply one -- so every existing direct call in the test suite is
+unaffected.
 """
 from __future__ import annotations
 
@@ -55,11 +68,16 @@ from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.model_selection import train_test_split
 from sqlalchemy.orm import Session
 
-from app.ai.churn_model import LOOKBACK_DAYS, score_member_churn
+from app.ai.churn_model import (
+    DEFAULT_CALIBRATION,
+    LOOKBACK_DAYS,
+    MerchantCalibration,
+    compute_merchant_calibration,
+    score_member_churn,
+)
 from app.db.models import Member, TransactionType
 from app.services.ledger import TIER_RANK
 
-HOLDOUT_DAYS = 45  # backtest split: train on data before `now - HOLDOUT_DAYS`, label = realized spend in the HOLDOUT_DAYS after that
 MIN_TRAINING_MEMBERS = 30  # below this, a fitted Ridge model would be statistically meaningless -- use the heuristic for everyone
 RETENTION_DAMPING_MAX = 0.7  # heuristic: churn-risk damping never exceeds a 70% haircut, so a projection never zeroes out entirely
 
@@ -94,6 +112,7 @@ class FutureValueModel:
     n_train: int
     r2: float | None  # None if the holdout split was too small to score meaningfully
     mae: float | None
+    calibration: MerchantCalibration
 
 
 @dataclass
@@ -112,11 +131,27 @@ def _aware(dt: datetime) -> datetime:
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
 
 
-def _rfm_as_of(member: Member, as_of: datetime) -> tuple[float, int, float]:
+def _rfm_as_of(
+    member: Member,
+    as_of: datetime,
+    lookback_days: float = LOOKBACK_DAYS,
+    monetary_cap: float | None = None,
+) -> tuple[float, int, float]:
     """Same recency/frequency/monetary definitions as
     `churn_model.compute_rfm`, but properly bounded to only transactions
     with `created_at <= as_of` -- see module docstring for why this can't
-    just call `compute_rfm(now=as_of)` directly during training."""
+    just call `compute_rfm(now=as_of)` directly during training.
+
+    `monetary_cap`, when given, clips each individual transaction's
+    contribution to `monetary` (and hence `avg_order_value` downstream) --
+    a single abnormally large transaction (a mis-keyed amount, a stolen-card
+    spike, or -- in the seeded demo data -- an intentionally injected fraud
+    pattern) landing inside a member's window would otherwise dominate their
+    avg_order_value, and because Future Value's trained path is a linear
+    regression with no output bound, one such outlier member can produce
+    an absurd multi-thousand-pound prediction. Churn scoring doesn't need
+    this guard -- its 0-100 output is clamped by construction -- but Future
+    Value's is not, so this needs to be handled here."""
     earn_and_redeem_before = [t for t in member.transactions if _aware(t.created_at) <= as_of]
     if earn_and_redeem_before:
         last_activity = max(_aware(t.created_at) for t in earn_and_redeem_before)
@@ -124,22 +159,35 @@ def _rfm_as_of(member: Member, as_of: datetime) -> tuple[float, int, float]:
         last_activity = _aware(member.joined_at)
     recency_days = max(0.0, (as_of - last_activity).total_seconds() / 86400.0)
 
-    window_start = as_of - timedelta(days=LOOKBACK_DAYS)
+    window_start = as_of - timedelta(days=lookback_days)
     earn_in_window = [
         t
         for t in member.transactions
         if t.type == TransactionType.EARN.value and window_start <= _aware(t.created_at) <= as_of
     ]
     frequency = len(earn_in_window)
-    monetary = sum(t.amount_gbp for t in earn_in_window)
+    if monetary_cap is not None:
+        monetary = sum(min(t.amount_gbp, monetary_cap) for t in earn_in_window)
+    else:
+        monetary = sum(t.amount_gbp for t in earn_in_window)
     return recency_days, frequency, monetary
 
 
-def compute_future_value_features(db: Session, member: Member, as_of: datetime) -> FVFeatures:
+def compute_future_value_features(
+    db: Session,
+    member: Member,
+    as_of: datetime,
+    lookback_days: float = LOOKBACK_DAYS,
+    monetary_cap: float | None = None,
+) -> FVFeatures:
     """Pure function: member + as-of timestamp -> feature set. Used both at
     training time (as_of=cutoff, pre-cutoff-only data) and at prediction
-    time (as_of=now, entire history)."""
-    recency_days, frequency, monetary = _rfm_as_of(member, as_of)
+    time (as_of=now, entire history). Defaults to the original fixed
+    LOOKBACK_DAYS and no capping when no per-merchant calibration is
+    supplied -- see `_rfm_as_of` for what `monetary_cap` guards against."""
+    recency_days, frequency, monetary = _rfm_as_of(
+        member, as_of, lookback_days=lookback_days, monetary_cap=monetary_cap
+    )
     avg_order_value = monetary / max(frequency, 1)
     joined_at = _aware(member.joined_at)
     tenure_days = max(0.0, (as_of - joined_at).total_seconds() / 86400.0)
@@ -169,13 +217,25 @@ def _future_spend_label(member: Member, cutoff: datetime, holdout_end: datetime)
     )
 
 
-def train_future_value_model(db: Session, merchant_id: str, now: datetime | None = None) -> FutureValueModel | None:
+def train_future_value_model(
+    db: Session,
+    merchant_id: str,
+    now: datetime | None = None,
+    calibration: MerchantCalibration | None = None,
+) -> FutureValueModel | None:
     """Backtest-train a Ridge regressor on this merchant's members. Returns
     None if fewer than MIN_TRAINING_MEMBERS are eligible (too few
     pre-cutoff-active members for training to be statistically meaningful)
-    -- callers should use the heuristic for every member in that case."""
+    -- callers should use the heuristic for every member in that case.
+
+    Auto-calibrates from this merchant's own data (see churn_model.py) when
+    no calibration is explicitly passed -- the returned model carries that
+    calibration forward so `predict_future_value` reuses the exact same
+    one, rather than every caller recomputing it."""
     now = now or datetime.now(timezone.utc)
-    cutoff = now - timedelta(days=HOLDOUT_DAYS)
+    if calibration is None:
+        calibration = compute_merchant_calibration(db, merchant_id, now=now)
+    cutoff = now - timedelta(days=calibration.holdout_days)
 
     members = db.query(Member).filter(Member.merchant_id == merchant_id).all()
     eligible = [m for m in members if _has_pre_cutoff_activity(m, cutoff)]
@@ -185,7 +245,13 @@ def train_future_value_model(db: Session, merchant_id: str, now: datetime | None
     feature_rows = []
     labels = []
     for m in eligible:
-        feats = compute_future_value_features(db, m, as_of=cutoff)
+        feats = compute_future_value_features(
+            db,
+            m,
+            as_of=cutoff,
+            lookback_days=calibration.lookback_days,
+            monetary_cap=calibration.monetary_saturation,
+        )
         feature_rows.append(feats.as_row())
         labels.append(_future_spend_label(m, cutoff, now))
 
@@ -210,7 +276,9 @@ def train_future_value_model(db: Session, merchant_id: str, now: datetime | None
             r2 = round(float(r2_score(y_test, preds)), 4)
             mae = round(float(mean_absolute_error(y_test, preds)), 2)
 
-    return FutureValueModel(ridge=ridge, cutoff=cutoff, n_train=len(eligible), r2=r2, mae=mae)
+    return FutureValueModel(
+        ridge=ridge, cutoff=cutoff, n_train=len(eligible), r2=r2, mae=mae, calibration=calibration
+    )
 
 
 def predict_future_value(
@@ -219,26 +287,41 @@ def predict_future_value(
     model: FutureValueModel | None,
     horizon_days: int = 90,
     now: datetime | None = None,
+    calibration: MerchantCalibration | None = None,
 ) -> FutureValueResult:
     """Score a single member. Falls back to the documented heuristic
     (per-member, not global) if `model` is None (merchant-wide: too few
     training members) or this specific member had zero pre-cutoff earn
-    activity (too new to have been part of training) -- see plan step 4."""
-    now = now or datetime.now(timezone.utc)
-    cutoff = now - timedelta(days=HOLDOUT_DAYS)
+    activity (too new to have been part of training) -- see plan step 4.
 
-    feats = compute_future_value_features(db, member, as_of=now)
-    monthly_purchase_rate = feats.frequency / (LOOKBACK_DAYS / 30.0)
+    `calibration` defaults to `model.calibration` when a model is supplied
+    (keeping train/predict consistent without a second DB query), or
+    DEFAULT_CALIBRATION when there's no model at all -- exactly the
+    condition under which `compute_merchant_calibration` would have fallen
+    back to that same default anyway."""
+    now = now or datetime.now(timezone.utc)
+    if calibration is None:
+        calibration = model.calibration if model is not None else DEFAULT_CALIBRATION
+    cutoff = now - timedelta(days=calibration.holdout_days)
+
+    feats = compute_future_value_features(
+        db,
+        member,
+        as_of=now,
+        lookback_days=calibration.lookback_days,
+        monetary_cap=calibration.monetary_saturation,
+    )
+    monthly_purchase_rate = feats.frequency / (calibration.lookback_days / 30.0)
 
     use_trained = model is not None and _has_pre_cutoff_activity(member, cutoff)
 
     if use_trained:
         X = pd.DataFrame([feats.as_row()], columns=FEATURE_COLUMNS)
         raw_prediction = float(model.ridge.predict(X)[0])
-        predicted_value = max(0.0, raw_prediction) * (horizon_days / HOLDOUT_DAYS)
+        predicted_value = max(0.0, raw_prediction) * (horizon_days / calibration.holdout_days)
         model_used: Literal["trained", "heuristic"] = "trained"
     else:
-        churn = score_member_churn(db, member, now=now)
+        churn = score_member_churn(db, member, now=now, calibration=calibration)
         retention_adjustment = 1 - (churn.churn_risk_score / 100.0) * RETENTION_DAMPING_MAX
         predicted_value = (
             feats.avg_order_value * monthly_purchase_rate * (horizon_days / 30.0) * retention_adjustment
@@ -261,10 +344,16 @@ def predict_future_value(
 def score_all_members_future_value(
     db: Session, merchant_id: str, horizon_days: int = 90
 ) -> list[FutureValueResult]:
-    """Trains once, reuses the same fitted model across every member --
-    same "compute once per request, not per member" shape as
-    fraud_detector.run_fraud_detection."""
+    """Trains once, reuses the same fitted model (and its calibration)
+    across every member -- same "compute once per request, not per member"
+    shape as fraud_detector.run_fraud_detection."""
     now = datetime.now(timezone.utc)
     members = db.query(Member).filter(Member.merchant_id == merchant_id).all()
     model = train_future_value_model(db, merchant_id, now=now)
-    return [predict_future_value(db, m, model, horizon_days=horizon_days, now=now) for m in members]
+    calibration = model.calibration if model is not None else compute_merchant_calibration(
+        db, merchant_id, now=now
+    )
+    return [
+        predict_future_value(db, m, model, horizon_days=horizon_days, now=now, calibration=calibration)
+        for m in members
+    ]

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.ai.churn_model import score_member_churn
+from app.ai.churn_model import compute_merchant_calibration, score_member_churn
 from app.api.deps import require_active_subscription, require_admin
 from app.db.base import get_db
 from app.db.models import (
@@ -34,10 +34,14 @@ def list_members(
 ) -> list[MemberWithChurn]:
     members = db.query(Member).filter(Member.merchant_id == merchant.id).all()
     results: list[MemberWithChurn] = []
+    # Calibration is derived from this merchant's own transaction history
+    # (see churn_model.py) -- compute it once per request, not once per
+    # member in the loop below.
+    calibration = compute_merchant_calibration(db, merchant.id) if include_churn else None
     for m in members:
         out = MemberWithChurn.model_validate(m)
         if include_churn:
-            churn = score_member_churn(db, m)
+            churn = score_member_churn(db, m, calibration=calibration)
             out.churn_risk_score = churn.churn_risk_score
             out.churn_risk_band = churn.risk_band
         results.append(out)
@@ -54,7 +58,8 @@ def get_member(
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found")
     out = MemberWithChurn.model_validate(member)
-    churn = score_member_churn(db, member)
+    calibration = compute_merchant_calibration(db, merchant.id)
+    churn = score_member_churn(db, member, calibration=calibration)
     out.churn_risk_score = churn.churn_risk_score
     out.churn_risk_band = churn.risk_band
     return out
