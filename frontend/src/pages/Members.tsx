@@ -231,9 +231,16 @@ export default function Members() {
                 <td>{m.tier}</td>
                 <td>{m.points_balance.toLocaleString()}</td>
                 <td>{formatDateUK(m.last_activity_at)}</td>
-                <td title={m.churn_risk_explanation ?? undefined}>
-                  <RiskBadge band={m.churn_risk_band} />{" "}
-                  {m.churn_risk_score !== null ? `${Math.round(m.churn_risk_score)}` : "-"}
+                <td style={{ minWidth: 220, maxWidth: 320 }}>
+                  <div>
+                    <RiskBadge band={m.churn_risk_band} />{" "}
+                    {m.churn_risk_score !== null ? `${Math.round(m.churn_risk_score)}` : "-"}
+                  </div>
+                  {m.churn_risk_explanation && (
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3, lineHeight: 1.4 }}>
+                      {m.churn_risk_explanation}
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
