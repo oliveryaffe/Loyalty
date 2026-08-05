@@ -36,7 +36,20 @@ from app.db.models import (  # noqa: E402
     Transaction,
     TransactionType,
 )
+from app.services.sample_data import VERTICAL_PROFILES  # noqa: E402
 from app.services.security import hash_password  # noqa: E402
+
+# The persistent demo account (seeded here) is coffee-shop-themed (see
+# generate_member for the cohort/tier shape) -- reuse the same product
+# catalog app/services/sample_data.py's in-app "Load sample data" flow
+# uses for that vertical, rather than maintaining a second product list.
+# This is also what fixes next_best_product.py's demo-account output:
+# without product_category/product_name on transactions, NBP degrades to
+# the sparse Redemption-based category fallback (every recommendation's
+# product_name stays null -- see tests/test_next_best_product.py's
+# category-fallback tests, now exercised against a dedicated minimal
+# fixture instead of this seed script).
+DEMO_PRODUCTS = VERTICAL_PROFILES["coffee_shop"].products
 
 SEED = 42
 NUM_MEMBERS = 620
@@ -233,6 +246,7 @@ def generate_earn_transactions(
         created_at = latest - timedelta(days=offset_days, hours=rng.uniform(0, 23))
         amount = round(rng.uniform(min_amt, max_amt), 2)
         points = int(amount)  # 1:1 points_per_pound, floored
+        category, product_name = rng.choice(DEMO_PRODUCTS)
         txn = Transaction(
             member_id=member.id,
             type=TransactionType.EARN.value,
@@ -240,6 +254,8 @@ def generate_earn_transactions(
             points=points,
             channel=rng.choice(["pos", "online", "mobile"]),
             created_at=created_at,
+            product_category=category,
+            product_name=product_name,
         )
         txns.append(txn)
 
@@ -254,6 +270,7 @@ def inject_amount_spike_fraud(member: Member, rng: random.Random, now: datetime)
     amount = round(rng.uniform(1200.0, 4000.0), 2)
     points = int(amount)
     created_at = now - timedelta(days=rng.randint(1, 20), hours=rng.uniform(0, 23))
+    category, product_name = rng.choice(DEMO_PRODUCTS)
     return Transaction(
         member_id=member.id,
         type=TransactionType.EARN.value,
@@ -262,6 +279,8 @@ def inject_amount_spike_fraud(member: Member, rng: random.Random, now: datetime)
         channel="online",
         created_at=created_at,
         synthetic_fraud_label=True,
+        product_category=category,
+        product_name=product_name,
     )
 
 
@@ -278,6 +297,7 @@ def inject_velocity_burst_fraud(member: Member, rng: random.Random, now: datetim
         # these should look like normal coffee-shop transactions.
         amount = round(rng.uniform(3.0, 12.0), 2)
         points = int(amount)
+        category, product_name = rng.choice(DEMO_PRODUCTS)
         txns.append(
             Transaction(
                 member_id=member.id,
@@ -287,6 +307,8 @@ def inject_velocity_burst_fraud(member: Member, rng: random.Random, now: datetim
                 channel="online",
                 created_at=created_at,
                 synthetic_fraud_label=True,
+                product_category=category,
+                product_name=product_name,
             )
         )
     return txns

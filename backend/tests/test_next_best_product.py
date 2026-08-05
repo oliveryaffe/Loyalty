@@ -1,11 +1,21 @@
 """Next-best-product model tests (app/ai/next_best_product.py).
 
-Covers PLAN_BATCH2.md acceptance criteria 3 & 6: against the seeded demo
-merchant with zero upload, the model degrades gracefully to the
-Redemption x RewardCatalogItem.category substrate (data_granularity
-"category", product_name null, non-empty category). After uploading
-product-level CSV data for a member, next-best-product for that member
-flips to data_granularity "product" with a real product_name.
+Covers PLAN_BATCH2.md acceptance criteria 3 & 6: a merchant with only
+redemption history (no product-tagged transactions -- e.g. before any CSV
+upload) degrades gracefully to the Redemption x RewardCatalogItem.category
+substrate (data_granularity "category", product_name null, non-empty
+category). After uploading product-level CSV data for a member,
+next-best-product for that member flips to data_granularity "product"
+with a real product_name.
+
+The persistent demo account (scripts/seed_data.py) now tags every earn
+transaction with a product_category/product_name from the start (same
+product catalog app/services/sample_data.py's in-app "Load sample data"
+flow uses for coffee_shop) -- so it always exercises the "product"
+granularity path, not "category". The category-fallback path below is
+therefore tested against a dedicated minimal merchant/redemption fixture
+instead of `seeded_db`, so this acceptance criterion stays covered even
+though the demo account itself no longer demonstrates it.
 """
 import pytest
 
@@ -14,22 +24,61 @@ from app.db.models import Member, Merchant, Redemption, RewardCatalogItem, Trans
 from app.services.csv_ingest import parse_and_ingest_csv
 
 
-def test_seeded_merchant_falls_back_to_category_granularity(seeded_db):
-    merchant = seeded_db.query(Merchant).first()
-    matrix, granularity = build_affinity_matrix(seeded_db, merchant.id)
+@pytest.fixture()
+def category_only_merchant(db_session):
+    """A merchant with completed redemptions across a couple of reward
+    categories but zero product-tagged transactions -- the "before any
+    CSV upload" state every real merchant starts in."""
+    m = Merchant(business_name="Category Fallback Test Co")
+    db_session.add(m)
+    db_session.flush()
+
+    rewards = {
+        "beverage": RewardCatalogItem(
+            merchant_id=m.id, name="Free Coffee", category="beverage", points_cost=100, active=True
+        ),
+        "merchandise": RewardCatalogItem(
+            merchant_id=m.id, name="Mug", category="merchandise", points_cost=200, active=True
+        ),
+        "food": RewardCatalogItem(
+            merchant_id=m.id, name="Free Pastry", category="food", points_cost=80, active=True
+        ),
+    }
+    db_session.add_all(rewards.values())
+    db_session.flush()
+
+    categories = list(rewards)
+    for i in range(15):
+        member = Member(
+            merchant_id=m.id, first_name=f"U{i}", last_name="Test", email=f"cat-fallback-u{i}@example.com",
+            points_balance=1000,
+        )
+        db_session.add(member)
+        db_session.flush()
+        reward = rewards[categories[i % len(categories)]]
+        db_session.add(
+            Redemption(member_id=member.id, reward_id=reward.id, points_spent=reward.points_cost, status="completed")
+        )
+    db_session.commit()
+    return m
+
+
+def test_falls_back_to_category_granularity_before_any_product_data(db_session, category_only_merchant):
+    matrix, granularity = build_affinity_matrix(db_session, category_only_merchant.id)
 
     assert granularity == "category"
-    assert not matrix.empty  # seed script generates real completed redemptions
+    assert not matrix.empty  # real completed redemptions exist
 
 
-def test_seeded_members_get_category_recommendations_with_null_product(seeded_db):
-    merchant = seeded_db.query(Merchant).first()
-    matrix, granularity = build_affinity_matrix(seeded_db, merchant.id)
+def test_members_get_category_recommendations_with_null_product(db_session, category_only_merchant):
+    matrix, granularity = build_affinity_matrix(db_session, category_only_merchant.id)
 
-    members = seeded_db.query(Member).filter(Member.merchant_id == merchant.id).limit(25).all()
+    members = (
+        db_session.query(Member).filter(Member.merchant_id == category_only_merchant.id).all()
+    )
     saw_non_empty_result = False
     for member in members:
-        ranked = recommend_next_best(seeded_db, member, matrix, granularity, top_n=3)
+        ranked = recommend_next_best(db_session, member, matrix, granularity, top_n=3)
         for r in ranked:
             saw_non_empty_result = True
             assert r.product_name is None
@@ -39,23 +88,41 @@ def test_seeded_members_get_category_recommendations_with_null_product(seeded_db
     assert saw_non_empty_result
 
 
-def test_cold_start_member_with_no_history_gets_popularity_fallback(seeded_db):
-    merchant = seeded_db.query(Merchant).first()
-    matrix, granularity = build_affinity_matrix(seeded_db, merchant.id)
+def test_cold_start_member_with_no_history_gets_popularity_fallback(db_session, category_only_merchant):
+    matrix, granularity = build_affinity_matrix(db_session, category_only_merchant.id)
 
     brand_new = Member(
-        merchant_id=merchant.id,
+        merchant_id=category_only_merchant.id,
         first_name="Cold",
         last_name="Start",
         email="cold-start-nbp-test@example.com",
     )
-    seeded_db.add(brand_new)
-    seeded_db.flush()
+    db_session.add(brand_new)
+    db_session.flush()
 
-    ranked = recommend_next_best(seeded_db, brand_new, matrix, granularity, top_n=3)
+    ranked = recommend_next_best(db_session, brand_new, matrix, granularity, top_n=3)
     assert len(ranked) > 0
     assert all(r.product_name is None for r in ranked)
     assert all("cold-start" in r.reason for r in ranked)
+
+
+def test_seeded_demo_merchant_now_gets_product_level_recommendations(seeded_db):
+    """Regression guard for the bug this reshuffle fixes: the persistent
+    demo account should show real product_name suggestions out of the
+    box, not the empty/null Product column a merchant would previously
+    see before ever uploading a CSV."""
+    merchant = seeded_db.query(Merchant).first()
+    matrix, granularity = build_affinity_matrix(seeded_db, merchant.id)
+    assert granularity == "product"
+
+    members = seeded_db.query(Member).filter(Member.merchant_id == merchant.id).limit(25).all()
+    saw_product_name = False
+    for member in members:
+        ranked = recommend_next_best(seeded_db, member, matrix, granularity, top_n=3)
+        if any(r.product_name for r in ranked):
+            saw_product_name = True
+            break
+    assert saw_product_name
 
 
 @pytest.fixture()

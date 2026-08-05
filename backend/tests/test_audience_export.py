@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.db.models import Member, Transaction, TransactionType, UsageEvent
+from app.db.models import Member, RewardCatalogItem, Redemption, Transaction, TransactionType, UsageEvent
 
 
 @pytest.fixture()
@@ -129,3 +129,66 @@ def test_export_does_not_shadow_member_detail_route(client, db_session, admin_he
     resp = client.get("/api/v1/members/export.csv", headers=admin_headers)
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/csv")
+
+
+# ---------------------------------------------------------------------------
+# Next-best-product-based export
+# ---------------------------------------------------------------------------
+
+
+def _seed_next_best_signal(db_session, merchant_id):
+    """Enough completed redemptions across two categories that
+    next_best_product's item-based CF produces a real, non-degenerate
+    ranking for a fresh member with no history of their own."""
+    rewards = {
+        "beverage": RewardCatalogItem(
+            merchant_id=merchant_id, name="Free Coffee", category="beverage", points_cost=100, active=True
+        ),
+        "merchandise": RewardCatalogItem(
+            merchant_id=merchant_id, name="Mug", category="merchandise", points_cost=200, active=True
+        ),
+    }
+    db_session.add_all(rewards.values())
+    db_session.flush()
+
+    for i in range(10):
+        m = Member(
+            merchant_id=merchant_id, first_name=f"NB{i}", last_name="Test", email=f"nb{i}@example.com",
+            points_balance=1000,
+        )
+        db_session.add(m)
+        db_session.flush()
+        category = "beverage" if i % 2 == 0 else "merchandise"
+        db_session.add(
+            Redemption(
+                member_id=m.id, reward_id=rewards[category].id, points_spent=rewards[category].points_cost,
+                status="completed",
+            )
+        )
+    db_session.commit()
+
+
+def test_export_by_next_best_category(client, db_session, admin_headers):
+    merchant_id = _merchant_id(client, admin_headers)
+    _seed_next_best_signal(db_session, merchant_id)
+
+    resp = client.get("/api/v1/members/export.csv?next_best_category=beverage", headers=admin_headers)
+    assert resp.status_code == 200
+    rows = _rows(resp.text)
+    assert rows[0] == ["email", "first_name", "last_name", "tags"]
+    for row in rows[1:]:
+        assert "next-best-beverage" in row[3]
+
+
+def test_export_rejects_both_risk_and_next_best_category(client, admin_headers):
+    resp = client.get(
+        "/api/v1/members/export.csv?risk=high&next_best_category=beverage", headers=admin_headers
+    )
+    assert resp.status_code == 400
+
+
+def test_export_by_next_best_category_empty_when_no_signal(client, admin_headers):
+    resp = client.get("/api/v1/members/export.csv?next_best_category=beverage", headers=admin_headers)
+    assert resp.status_code == 200
+    rows = _rows(resp.text)
+    assert rows[1:] == []

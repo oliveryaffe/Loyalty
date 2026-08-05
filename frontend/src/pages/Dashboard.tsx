@@ -20,6 +20,57 @@ import {
 } from "../api/client";
 import { formatGBP, formatDateUK } from "../utils";
 
+const JOURNEY_DISMISSED_KEY = "ledgerly_dashboard_journey_dismissed";
+
+function OnboardingJourney({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="card" style={{ marginBottom: 20, position: "relative", maxWidth: 680 }}>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        style={{
+          position: "absolute",
+          top: 10,
+          right: 10,
+          background: "none",
+          border: "none",
+          color: "var(--text-secondary)",
+          cursor: "pointer",
+          fontSize: 18,
+          lineHeight: 1,
+        }}
+      >
+        &times;
+      </button>
+      <h3 style={{ marginTop: 0, marginBottom: 12 }}>How Ledgerly works</h3>
+      <ol style={{ paddingLeft: 20, margin: 0, display: "grid", gap: 10, fontSize: 13, color: "var(--text-secondary)" }}>
+        <li>
+          <strong style={{ color: "var(--text-primary)" }}>Load your historic data.</strong> Upload a CSV of
+          past transactions on the Insights page when you join (or load sample data first to see how it
+          looks) -- the more history Ledgerly has, the better every prediction below.
+        </li>
+        <li>
+          <strong style={{ color: "var(--text-primary)" }}>We score every customer automatically.</strong>{" "}
+          Churn risk and predicted future value update the moment new data comes in -- no manual analysis
+          on your end.
+        </li>
+        <li>
+          <strong style={{ color: "var(--text-primary)" }}>Turn on the weekly digest.</strong> In Settings,
+          get a Monday-morning summary of who's at risk and your biggest opportunity, without needing to log
+          in and check.
+        </li>
+        <li>
+          <strong style={{ color: "var(--text-primary)" }}>Predictions sharpen over time.</strong>{" "}
+          Future-value forecasts get meaningfully more accurate once Ledgerly has seen a full quarter of
+          your transaction history -- the calibration note below shows exactly which mode you're in right
+          now.
+        </li>
+      </ol>
+    </div>
+  );
+}
+
 function calibrationStatusText(
   profile: BusinessProfileOut | null,
   businessTypes: BusinessTypeOption[] | null
@@ -45,6 +96,14 @@ export default function Dashboard() {
   const [isSampleData, setIsSampleData] = useState(false);
   const [benchmark, setBenchmark] = useState<BenchmarkOut | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showJourney, setShowJourney] = useState(
+    () => localStorage.getItem(JOURNEY_DISMISSED_KEY) !== "true"
+  );
+
+  function dismissJourney() {
+    localStorage.setItem(JOURNEY_DISMISSED_KEY, "true");
+    setShowJourney(false);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +155,7 @@ export default function Dashboard() {
     <div>
       <h2>Dashboard</h2>
       {error && <p className="error-text">{error}</p>}
+      {showJourney && !loading && <OnboardingJourney onDismiss={dismissJourney} />}
       {isSampleData && !loading && (
         <div
           style={{

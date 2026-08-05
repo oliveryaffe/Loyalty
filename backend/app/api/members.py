@@ -28,6 +28,7 @@ from app.services.audience_export import (
     DEFAULT_EXPORT_FORMAT,
     VALID_RISK_BANDS,
     build_audience_export_rows,
+    build_next_best_export_rows,
 )
 from app.services.usage import record_usage_event
 
@@ -62,6 +63,7 @@ def list_members(
 @router.get("/export.csv")
 def export_audience(
     risk: str | None = Query(None),
+    next_best_category: str | None = Query(None),
     format: str = Query(DEFAULT_EXPORT_FORMAT),
     db: Session = Depends(get_db),
     merchant: Merchant = Depends(require_active_subscription),
@@ -71,10 +73,16 @@ def export_audience(
     before GET /{member_id} below so "export.csv" is matched as this
     literal route rather than captured as a member_id path parameter.
 
-    `risk` optionally filters to one band ("high"/"medium"/"low"); omitted
-    means all members. `format` picks the header row to match Mailchimp,
-    Klaviyo, or a plain generic CSV -- same underlying rows either way.
+    Exactly one of `risk` ("high"/"medium"/"low") or `next_best_category`
+    may be set to filter the export; omitting both exports every member.
+    `format` picks the header row to match Mailchimp, Klaviyo, or a plain
+    generic CSV -- same underlying rows either way.
     """
+    if risk is not None and next_best_category is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide at most one of risk or next_best_category, not both",
+        )
     if risk is not None and risk not in VALID_RISK_BANDS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"risk must be one of {VALID_RISK_BANDS}"
@@ -85,7 +93,12 @@ def export_audience(
             detail=f"format must be one of {sorted(AUDIENCE_EXPORT_FORMATS)}",
         )
 
-    rows = build_audience_export_rows(db, merchant.id, risk_band=risk)
+    if next_best_category is not None:
+        rows = build_next_best_export_rows(db, merchant.id, next_best_category)
+        segment_label = f"next-best-{next_best_category}"
+    else:
+        rows = build_audience_export_rows(db, merchant.id, risk_band=risk)
+        segment_label = risk or "all"
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
@@ -99,7 +112,7 @@ def export_audience(
     record_usage_event(db, merchant, "audience_export")
     db.commit()
 
-    filename = f"ledgerly-audience-{risk or 'all'}-{format}.csv"
+    filename = f"ledgerly-audience-{segment_label}-{format}.csv"
     return StreamingResponse(
         iter([buffer.getvalue()]),
         media_type="text/csv",

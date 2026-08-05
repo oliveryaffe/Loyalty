@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
+import { isApiError } from "../AuthContext";
 import {
+  AudienceExportFormat,
   downloadInsightsReport,
+  downloadNextBestAudienceExport,
   FutureValueOut,
   getFutureValue,
   getNextBestProduct,
@@ -49,6 +52,11 @@ export default function Insights() {
   const [downloading, setDownloading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const [exportCategory, setExportCategory] = useState("");
+  const [exportFormat, setExportFormat] = useState<AudienceExportFormat>("generic");
+  const [exportingAudience, setExportingAudience] = useState(false);
+  const [exportAudienceError, setExportAudienceError] = useState<string | null>(null);
+
   function loadFutureValues() {
     setFutureValues(null);
     Promise.all([getFutureValue(HORIZON_DAYS), listMembers(false)])
@@ -80,7 +88,7 @@ export default function Insights() {
         const id = memberIds[cursor];
         cursor += 1;
         try {
-          const result = await getNextBestProduct(id, 1);
+          const result = await getNextBestProduct(id, 3);
           setNextBest((prev) => ({ ...prev, [id]: result }));
         } catch {
           setNextBest((prev) => ({ ...prev, [id]: "error" }));
@@ -162,6 +170,30 @@ export default function Insights() {
       .finally(() => setDownloading(false));
   }
 
+  // Distinct #1-suggestion categories seen so far across loaded members --
+  // populates the "export by next-best category" picker below. Grows in
+  // as loadNextBest's background workers fill in, same as the table cells.
+  const nextBestCategories = useMemo(() => {
+    const seen = new Set<string>();
+    Object.values(nextBest).forEach((v) => {
+      if (Array.isArray(v) && v[0]) seen.add(v[0].category);
+    });
+    return Array.from(seen).sort();
+  }, [nextBest]);
+
+  async function handleExportByCategory() {
+    if (!exportCategory) return;
+    setExportAudienceError(null);
+    setExportingAudience(true);
+    try {
+      await downloadNextBestAudienceExport(exportCategory, exportFormat);
+    } catch (err) {
+      setExportAudienceError(isApiError(err) ? err.message : "Unable to export this audience.");
+    } finally {
+      setExportingAudience(false);
+    }
+  }
+
   return (
     <div>
       <h2>Insights</h2>
@@ -224,6 +256,46 @@ export default function Insights() {
         </div>
       </details>
 
+      {nextBestCategories.length > 0 && (
+        <div className="toolbar" style={{ marginBottom: 16 }}>
+          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+            Export everyone whose top suggestion is:
+          </span>
+          <select
+            className="pill-select"
+            value={exportCategory}
+            onChange={(e) => setExportCategory(e.target.value)}
+            aria-label="Next-best category to export"
+          >
+            <option value="">Choose a category...</option>
+            {nextBestCategories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <select
+            className="pill-select"
+            value={exportFormat}
+            onChange={(e) => setExportFormat(e.target.value as AudienceExportFormat)}
+            aria-label="Export format"
+          >
+            <option value="generic">Generic CSV</option>
+            <option value="mailchimp">Mailchimp</option>
+            <option value="klaviyo">Klaviyo</option>
+          </select>
+          <button
+            type="button"
+            className="secondary"
+            onClick={handleExportByCategory}
+            disabled={!exportCategory || exportingAudience}
+          >
+            {exportingAudience ? "Exporting..." : "Export audience"}
+          </button>
+        </div>
+      )}
+      {exportAudienceError && <p className="error-text">{exportAudienceError}</p>}
+
       {uploadError && <p className="error-text">Upload failed: {uploadError}</p>}
       {uploadResult && (
         <div className="upload-banner">
@@ -261,9 +333,9 @@ export default function Insights() {
               <th>Model</th>
               <th>Next Best Category</th>
               <th
-                title='Upload transaction data with product detail to unlock product-level suggestions'
+                title="Ranked suggestions, most confident first. Upload transaction data with product detail to unlock named products instead of just categories."
               >
-                Next Best Product
+                Top Suggestions
               </th>
             </tr>
           </thead>
@@ -293,13 +365,26 @@ export default function Insights() {
                   <td
                     title={
                       top && top.data_granularity === "category"
-                        ? "Upload transaction data with product detail to unlock product-level suggestions"
+                        ? "Upload transaction data with product detail to unlock named products instead of just categories"
                         : undefined
                     }
                   >
                     {nb === "loading" ? (
                       <span className="loading" style={{ padding: 0 }}>...</span>
-                    ) : top?.product_name ?? "—"}
+                    ) : nb === "error" || !Array.isArray(nb) || nb.length === 0 ? (
+                      "—"
+                    ) : (
+                      <ol style={{ margin: 0, paddingLeft: 16, fontSize: 12 }}>
+                        {nb.map((suggestion, i) => (
+                          <li key={i}>
+                            {suggestion.product_name ?? suggestion.category}
+                            {suggestion.product_name && (
+                              <span style={{ color: "var(--text-secondary)" }}> ({suggestion.category})</span>
+                            )}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
                   </td>
                 </tr>
               );

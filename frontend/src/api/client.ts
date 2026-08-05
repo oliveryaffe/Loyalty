@@ -828,3 +828,29 @@ export async function downloadAudienceExport(
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+// Export everyone whose #1 next-best-product suggestion is `category` --
+// a genuinely product-level segment for email/loyalty campaigns, rather
+// than just a risk-based list.
+export async function downloadNextBestAudienceExport(
+  category: string,
+  format: AudienceExportFormat
+): Promise<void> {
+  const token = getToken();
+  const params = new URLSearchParams({ format, next_best_category: category });
+  const res = await fetch(`${API_BASE_URL}/members/export.csv?${params.toString()}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, res.statusText);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ledgerly-audience-next-best-${category}-${format}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
