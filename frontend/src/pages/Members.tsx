@@ -208,7 +208,7 @@ export default function Members() {
                 <td>{m.tier}</td>
                 <td>{m.points_balance.toLocaleString()}</td>
                 <td>{formatDateUK(m.last_activity_at)}</td>
-                <td>
+                <td title={m.churn_risk_explanation ?? undefined}>
                   <RiskBadge band={m.churn_risk_band} />{" "}
                   {m.churn_risk_score !== null ? `${Math.round(m.churn_risk_score)}` : "-"}
                 </td>
@@ -250,6 +250,11 @@ export default function Members() {
                 ? `${Math.round(selectedMember.churn_risk_score)} / 100`
                 : "n/a"}
             </p>
+            {selectedMember.churn_risk_explanation && (
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: -4 }}>
+                {selectedMember.churn_risk_explanation}
+              </p>
+            )}
             <h3 style={{ marginBottom: 8 }}>Recommended Rewards</h3>
             {recLoading && <p className="loading">Scoring recommendations...</p>}
             {!recLoading && recommendations && recommendations.length === 0 && (

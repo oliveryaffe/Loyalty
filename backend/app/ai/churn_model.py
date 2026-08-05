@@ -185,6 +185,11 @@ class ChurnResult:
     monetary: float
     churn_risk_score: float
     risk_band: str
+    # Plain-English "why" (competitive-brief backlog item #5): a non-
+    # technical shop owner needs a sentence, not a 0-100 number -- see
+    # explain_churn_risk below for how this is built from the same RFM
+    # inputs/calibration the score itself already uses.
+    explanation: str = ""
 
 
 def _aware(dt: datetime) -> datetime:
@@ -287,6 +292,24 @@ def compute_merchant_calibration(
     )
 
 
+def _risk_components(
+    recency_days: float,
+    frequency: int,
+    monetary: float,
+    calibration: MerchantCalibration = DEFAULT_CALIBRATION,
+) -> tuple[float, float, float]:
+    """The three unweighted 0-100 per-dimension risk components that
+    churn_risk_from_rfm combines. Split out so explain_churn_risk can
+    identify which dimension is actually driving a given score without
+    duplicating the saturation-curve math."""
+    recency_risk = min(100.0, (recency_days / calibration.recency_saturation_days) * 100.0)
+    frequency_risk = max(0.0, 100.0 - (frequency / calibration.frequency_saturation) * 100.0)
+    frequency_risk = min(100.0, frequency_risk)
+    monetary_risk = max(0.0, 100.0 - (monetary / calibration.monetary_saturation) * 100.0)
+    monetary_risk = min(100.0, monetary_risk)
+    return recency_risk, frequency_risk, monetary_risk
+
+
 def churn_risk_from_rfm(
     recency_days: float,
     frequency: int,
@@ -297,18 +320,69 @@ def churn_risk_from_rfm(
     `calibration` defaults to the original fixed constants, so every
     existing caller that doesn't pass one gets byte-for-byte the same
     behavior as before per-merchant calibration existed."""
-    recency_risk = min(100.0, (recency_days / calibration.recency_saturation_days) * 100.0)
-    frequency_risk = max(0.0, 100.0 - (frequency / calibration.frequency_saturation) * 100.0)
-    frequency_risk = min(100.0, frequency_risk)
-    monetary_risk = max(0.0, 100.0 - (monetary / calibration.monetary_saturation) * 100.0)
-    monetary_risk = min(100.0, monetary_risk)
-
+    recency_risk, frequency_risk, monetary_risk = _risk_components(
+        recency_days, frequency, monetary, calibration
+    )
     score = (
         WEIGHT_RECENCY * recency_risk
         + WEIGHT_FREQUENCY * frequency_risk
         + WEIGHT_MONETARY * monetary_risk
     )
     return round(max(0.0, min(100.0, score)), 2)
+
+
+def explain_churn_risk(
+    recency_days: float,
+    frequency: int,
+    monetary: float,
+    risk_band: str,
+    calibration: MerchantCalibration = DEFAULT_CALIBRATION,
+) -> str:
+    """One plain-English sentence naming whichever RFM dimension is
+    actually driving this member's score (competitive-brief backlog item
+    #5) -- "High risk because it's been 34 days since their last visit,
+    well past their usual rhythm" rather than a bare number. Identifies
+    the dominant driver by comparing each dimension's *weighted*
+    contribution to the score (not the raw 0-100 component), since
+    recency counts for more than monetary by design (see WEIGHT_RECENCY/
+    WEIGHT_FREQUENCY/WEIGHT_MONETARY) -- a dimension that's technically
+    "worse" in isolation may still not be what's actually moving the
+    score."""
+    recency_risk, frequency_risk, monetary_risk = _risk_components(
+        recency_days, frequency, monetary, calibration
+    )
+    contributions = {
+        "recency": WEIGHT_RECENCY * recency_risk,
+        "frequency": WEIGHT_FREQUENCY * frequency_risk,
+        "monetary": WEIGHT_MONETARY * monetary_risk,
+    }
+    driver = max(contributions, key=lambda k: contributions[k])
+    lookback = int(round(calibration.lookback_days))
+
+    if risk_band == "low":
+        return (
+            f"Low risk — last visit {recency_days:.0f} day(s) ago, comfortably within the usual rhythm "
+            f"of customers here."
+        )
+
+    prefix = "High risk" if risk_band == "high" else "Medium risk"
+
+    if driver == "recency":
+        return (
+            f"{prefix}, mainly because it's been {recency_days:.0f} days since their last visit — most "
+            f"customers here return within about {int(round(calibration.recency_saturation_days))} days."
+        )
+    if driver == "frequency":
+        plural = "" if frequency == 1 else "s"
+        return (
+            f"{prefix}, mainly because they've made only {frequency} purchase{plural} in the last "
+            f"{lookback} days, below the ~{int(round(calibration.frequency_saturation))} typical of an "
+            f"engaged customer here."
+        )
+    return (
+        f"{prefix}, mainly because they've spent only £{monetary:.2f} in the last {lookback} days, "
+        f"below the £{int(round(calibration.monetary_saturation))} typical of an engaged customer here."
+    )
 
 
 def compute_rfm(
@@ -358,6 +432,8 @@ def score_member_churn(
         db, member, now=now, lookback_days=calibration.lookback_days
     )
     score = churn_risk_from_rfm(recency_days, frequency, monetary, calibration=calibration)
+    band = _risk_band(score)
+    explanation = explain_churn_risk(recency_days, frequency, monetary, band, calibration=calibration)
     return ChurnResult(
         member_id=member.id,
         first_name=member.first_name,
@@ -366,7 +442,8 @@ def score_member_churn(
         frequency=frequency,
         monetary=round(monetary, 2),
         churn_risk_score=score,
-        risk_band=_risk_band(score),
+        risk_band=band,
+        explanation=explanation,
     )
 
 

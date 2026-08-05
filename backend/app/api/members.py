@@ -54,6 +54,7 @@ def list_members(
             churn = score_member_churn(db, m, calibration=calibration)
             out.churn_risk_score = churn.churn_risk_score
             out.churn_risk_band = churn.risk_band
+            out.churn_risk_explanation = churn.explanation
         results.append(out)
     return results
 
@@ -120,6 +121,7 @@ def get_member(
     churn = score_member_churn(db, member, calibration=calibration)
     out.churn_risk_score = churn.churn_risk_score
     out.churn_risk_band = churn.risk_band
+    out.churn_risk_explanation = churn.explanation
     return out
 
 

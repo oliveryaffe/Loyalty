@@ -38,3 +38,7 @@ class MemberOut(BaseModel):
 class MemberWithChurn(MemberOut):
     churn_risk_score: float | None = None
     churn_risk_band: str | None = None
+    # Plain-English "why" (competitive-brief backlog item #5) -- see
+    # app/ai/churn_model.py::explain_churn_risk. None whenever churn
+    # scoring wasn't requested (include_churn=False) or hasn't run yet.
+    churn_risk_explanation: str | None = None

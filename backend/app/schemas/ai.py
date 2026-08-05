@@ -20,6 +20,9 @@ class ChurnScoreOut(BaseModel):
     monetary: float
     churn_risk_score: float
     risk_band: str
+    # Plain-English "why" (competitive-brief backlog item #5) -- see
+    # app/ai/churn_model.py::explain_churn_risk.
+    explanation: str
 
 
 class FraudAlertOut(BaseModel):

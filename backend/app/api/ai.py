@@ -108,6 +108,7 @@ def get_churn_scores(
             monetary=r.monetary,
             churn_risk_score=r.churn_risk_score,
             risk_band=r.risk_band,
+            explanation=r.explanation,
         )
         for r in results
     ]
@@ -137,6 +138,7 @@ def get_member_churn(
         monetary=r.monetary,
         churn_risk_score=r.churn_risk_score,
         risk_band=r.risk_band,
+        explanation=r.explanation,
     )
 
 

@@ -118,6 +118,7 @@ export interface MemberWithChurn {
   erased_at: string | null;
   churn_risk_score: number | null;
   churn_risk_band: string | null;
+  churn_risk_explanation: string | null;
 }
 
 export interface MemberCreate {
@@ -252,6 +253,7 @@ export interface ChurnScoreOut {
   monetary: number;
   churn_risk_score: number;
   risk_band: string;
+  explanation: string;
 }
 
 export interface FraudAlertOut {
