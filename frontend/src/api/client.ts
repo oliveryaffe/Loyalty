@@ -115,6 +115,7 @@ export interface MemberWithChurn {
   is_active: boolean;
   joined_at: string;
   last_activity_at: string;
+  erased_at: string | null;
   churn_risk_score: number | null;
   churn_risk_band: string | null;
 }
@@ -532,6 +533,53 @@ export function loadSampleData(businessType: string): Promise<SampleDataOut> {
 
 export function getSampleDataStatus(): Promise<SampleDataStatusOut> {
   return request<SampleDataStatusOut>("/insights/sample-data/status");
+}
+
+// ---------------------------------------------------------------------
+// GDPR / Compliance tab
+// ---------------------------------------------------------------------
+
+export interface MemberErasureResult {
+  member_id: string;
+  erased_at: string;
+  already_erased: boolean;
+}
+
+// Loosely typed -- this is a full nested export payload (member,
+// transactions, redemptions, fraud_alerts, experiment_assignments); the
+// frontend only ever downloads it as a file, never reads individual
+// fields, so there's no value in fully typing every nested shape here.
+export type MemberExportOut = Record<string, unknown>;
+
+export interface GdprAuditLogEntryOut {
+  id: string;
+  member_id: string;
+  member_label: string;
+  action: "export" | "erase";
+  performed_by_email: string;
+  created_at: string;
+}
+
+export interface GdprSummaryOut {
+  total_members: number;
+  erased_members: number;
+  requests_last_30_days: number;
+}
+
+export function gdprExportMember(memberId: string): Promise<MemberExportOut> {
+  return request<MemberExportOut>(`/members/${memberId}/gdpr-export`);
+}
+
+export function gdprEraseMember(memberId: string): Promise<MemberErasureResult> {
+  return request<MemberErasureResult>(`/members/${memberId}/gdpr-erase`, { method: "POST" });
+}
+
+export function getGdprSummary(): Promise<GdprSummaryOut> {
+  return request<GdprSummaryOut>("/gdpr/summary");
+}
+
+export function getGdprAuditLog(limit = 50): Promise<GdprAuditLogEntryOut[]> {
+  return request<GdprAuditLogEntryOut[]>(`/gdpr/audit-log?limit=${limit}`);
 }
 
 // Clears business_type back to null so the onboarding picker (see

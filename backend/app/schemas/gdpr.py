@@ -41,3 +41,25 @@ class MemberExportOut(BaseModel):
     fraud_alerts: list[FraudAlertOut]
     experiment_assignments: list[ExperimentAssignmentOut]
     exported_at: datetime
+
+
+class GdprAuditLogEntryOut(BaseModel):
+    """One row of the Compliance tab's audit trail -- see
+    app.db.models.GdprAuditLogEntry."""
+
+    id: str
+    member_id: str
+    member_label: str
+    action: str
+    performed_by_email: str
+    created_at: datetime
+
+
+class GdprSummaryOut(BaseModel):
+    """Headline counts for the Compliance tab -- how many members are
+    live vs. already erased, and how much subject-request activity has
+    happened recently."""
+
+    total_members: int
+    erased_members: int
+    requests_last_30_days: int

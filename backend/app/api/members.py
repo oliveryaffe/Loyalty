@@ -11,6 +11,7 @@ from app.db.base import get_db
 from app.db.models import (
     ExperimentAssignment,
     FraudAlert,
+    GdprAuditLogEntry,
     Member,
     Merchant,
     Redemption,
@@ -94,6 +95,26 @@ def _get_member_or_404(db: Session, merchant_id: str, member_id: str) -> Member:
     return member
 
 
+def _log_gdpr_action(
+    db: Session, current_user: TeamMember, member: Member, action: str, label: str
+) -> None:
+    """Records one row in the Compliance tab's audit trail
+    (app.db.models.GdprAuditLogEntry). `label` is frozen at call time
+    (the member's current name/email) rather than re-derived later, so
+    the audit trail still reads correctly even after a subsequent
+    erasure overwrites the member's name/email fields."""
+    db.add(
+        GdprAuditLogEntry(
+            merchant_id=current_user.merchant_id,
+            member_id=member.id,
+            member_label=label,
+            action=action,
+            performed_by_team_member_id=current_user.id,
+            performed_by_email=current_user.email,
+        )
+    )
+
+
 @router.post("/{member_id}/gdpr-erase", response_model=MemberErasureResult)
 def gdpr_erase_member(
     member_id: str,
@@ -128,15 +149,22 @@ def gdpr_erase_member(
     member = _get_member_or_404(db, current_user.merchant_id, member_id)
 
     if member.erased_at is not None:
+        _log_gdpr_action(db, current_user, member, "erase", f"{member.first_name} {member.last_name}")
+        db.commit()
         return MemberErasureResult(
             member_id=member.id, erased_at=member.erased_at, already_erased=True
         )
+
+    # Frozen before the overwrite below -- the audit trail should still
+    # read "erased jane.doe@example.com", not "erased Erased Member".
+    original_label = f"{member.first_name} {member.last_name} <{member.email}>"
 
     member.first_name = "Erased"
     member.last_name = "Member"
     member.email = f"erased-{member.id}@deleted.ledgerly.invalid"
     member.is_active = False
     member.erased_at = datetime.now(timezone.utc)
+    _log_gdpr_action(db, current_user, member, "erase", original_label)
     db.commit()
     db.refresh(member)
 
@@ -182,6 +210,9 @@ def gdpr_export_member(
     experiment_assignments = (
         db.query(ExperimentAssignment).filter(ExperimentAssignment.member_id == member.id).all()
     )
+
+    _log_gdpr_action(db, current_user, member, "export", f"{member.first_name} {member.last_name} <{member.email}>")
+    db.commit()
 
     return MemberExportOut(
         member=member,

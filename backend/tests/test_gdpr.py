@@ -279,3 +279,93 @@ def test_gdpr_export_includes_experiment_assignments(client, db_session, admin_h
     assert exported_assignment["experiment_id"] == experiment_id
     assert exported_assignment["variant"] == assignment.variant
     assert exported_assignment["variant"] in ("a", "b")
+
+
+# ---------------------------------------------------------------------------
+# Compliance tab: audit log + summary (app/api/gdpr.py)
+# ---------------------------------------------------------------------------
+
+
+def test_export_writes_an_audit_log_entry(client, admin_headers):
+    member_id = _create_member(client, admin_headers, email="audit-export@example.com")
+    client.get(f"/api/v1/members/{member_id}/gdpr-export", headers=admin_headers)
+
+    resp = client.get("/api/v1/gdpr/audit-log", headers=admin_headers)
+    assert resp.status_code == 200
+    entries = resp.json()
+    assert len(entries) == 1
+    assert entries[0]["action"] == "export"
+    assert entries[0]["member_id"] == member_id
+    assert "audit-export@example.com" in entries[0]["member_label"]
+    assert entries[0]["performed_by_email"] == "owner@acme.example.com"
+
+
+def test_erase_writes_an_audit_log_entry_with_frozen_label(client, admin_headers):
+    member_id = _create_member(client, admin_headers, email="audit-erase@example.com")
+    client.post(f"/api/v1/members/{member_id}/gdpr-erase", headers=admin_headers)
+
+    resp = client.get("/api/v1/gdpr/audit-log", headers=admin_headers)
+    entries = resp.json()
+    assert len(entries) == 1
+    assert entries[0]["action"] == "erase"
+    # Frozen at the moment of erasure -- must still show the real identity,
+    # not "Erased Member".
+    assert "Grace Hopper" in entries[0]["member_label"]
+    assert "audit-erase@example.com" in entries[0]["member_label"]
+
+
+def test_idempotent_erase_replay_still_logs(client, admin_headers):
+    member_id = _create_member(client, admin_headers)
+    client.post(f"/api/v1/members/{member_id}/gdpr-erase", headers=admin_headers)
+    client.post(f"/api/v1/members/{member_id}/gdpr-erase", headers=admin_headers)
+
+    resp = client.get("/api/v1/gdpr/audit-log", headers=admin_headers)
+    entries = resp.json()
+    assert len(entries) == 2
+    assert all(e["action"] == "erase" for e in entries)
+
+
+def test_audit_log_scoped_per_merchant(client, admin_headers):
+    member_id = _create_member(client, admin_headers)
+    client.get(f"/api/v1/members/{member_id}/gdpr-export", headers=admin_headers)
+
+    client.post(
+        "/api/v1/auth/signup",
+        json={"business_name": "Other Biz", "email": "other-gdpr@example.com", "password": "s3cret-pw"},
+    )
+    other_login = client.post(
+        "/api/v1/auth/login", json={"email": "other-gdpr@example.com", "password": "s3cret-pw"}
+    )
+    other_headers = {"Authorization": f"Bearer {other_login.json()['access_token']}"}
+
+    resp = client.get("/api/v1/gdpr/audit-log", headers=other_headers)
+    assert resp.json() == []
+
+
+def test_audit_log_requires_admin_role(client, admin_headers, member_role_headers):
+    resp = client.get("/api/v1/gdpr/audit-log", headers=member_role_headers)
+    assert resp.status_code == 403
+
+
+def test_audit_log_requires_auth(client):
+    resp = client.get("/api/v1/gdpr/audit-log")
+    assert resp.status_code == 401
+
+
+def test_summary_counts_members_and_erasures(client, admin_headers):
+    m1 = _create_member(client, admin_headers, email="summary1@example.com")
+    _create_member(client, admin_headers, email="summary2@example.com")
+    client.post(f"/api/v1/members/{m1}/gdpr-erase", headers=admin_headers)
+
+    resp = client.get("/api/v1/gdpr/summary", headers=admin_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total_members"] == 2
+    assert body["erased_members"] == 1
+    assert body["requests_last_30_days"] == 1
+
+
+def test_summary_requires_admin_role(client, admin_headers, member_role_headers):
+    resp = client.get("/api/v1/gdpr/summary", headers=member_role_headers)
+    assert resp.status_code == 403
+

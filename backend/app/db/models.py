@@ -357,6 +357,40 @@ class BillingEvent(Base):
     raw_payload: Mapped[str] = mapped_column(Text, default="")
 
 
+class GdprAuditLogEntry(Base):
+    """Append-only record of every GDPR subject-access export and
+    erasure request -- the "consent/action audit trail" a UK GDPR-first
+    product should be able to show, not just perform. Written once per
+    call to POST /members/{id}/gdpr-erase or GET /members/{id}/gdpr-export
+    (app/api/members.py), including idempotent erase replays -- "someone
+    requested this again" is itself an auditable fact, not just the
+    state-changing outcome.
+
+    `member_id` is kept even after the member itself is anonymized (the
+    FK isn't nulled on erasure) so the audit trail still shows which
+    member row an action was against; `member_label` freezes a
+    human-readable identifier (name/email) *at the time of the action*,
+    since the Members page will otherwise show "Erased Member" for any
+    row erased after the fact -- the audit trail should still read
+    "erased jane.doe@example.com on 12 May", not "erased Erased Member".
+
+    Brand-new table, zero migration risk (same as BillingEvent/
+    UsageEvent above)."""
+
+    __tablename__ = "gdpr_audit_log_entries"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    merchant_id: Mapped[str] = mapped_column(ForeignKey("merchants.id"), nullable=False, index=True)
+    member_id: Mapped[str] = mapped_column(ForeignKey("members.id"), nullable=False, index=True)
+    member_label: Mapped[str] = mapped_column(String(255), nullable=False)
+    action: Mapped[str] = mapped_column(String(20), nullable=False)  # "export" | "erase"
+    performed_by_team_member_id: Mapped[str] = mapped_column(
+        ForeignKey("team_members.id"), nullable=False
+    )
+    performed_by_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
 class UsageEvent(Base):
     """One row per billable "insight run" -- the unit pricing moved to
     once the platform repositioned away from a per-member loyalty price

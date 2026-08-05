@@ -13,6 +13,7 @@ from app.api import (
     auth,
     billing,
     experiments,
+    gdpr,
     insights,
     members,
     rewards,
@@ -65,3 +66,4 @@ app.include_router(billing.router)
 app.include_router(settings_api.router)
 app.include_router(winback.router)
 app.include_router(experiments.router)
+app.include_router(gdpr.router)
