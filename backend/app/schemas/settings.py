@@ -31,3 +31,22 @@ class NotificationSettingsUpdate(BaseModel):
     notification_email: EmailStr | None = None
     notify_on_churn_risk: bool | None = None
     notify_on_fraud_alert: bool | None = None
+
+
+class BusinessTypeOption(BaseModel):
+    value: str
+    label: str
+
+
+class BusinessProfileOut(BaseModel):
+    """`business_type=None` means the merchant hasn't completed onboarding
+    yet -- the frontend shows a one-question business-type picker on the
+    dashboard whenever this is null, and stops once it's set (including to
+    "other", a valid explicit answer). See app.ai.churn_model for how this
+    feeds churn/future-value's calibration fallback."""
+
+    business_type: str | None
+
+
+class BusinessProfileUpdate(BaseModel):
+    business_type: str

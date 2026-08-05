@@ -448,6 +448,36 @@ export function updateNotificationSettings(
 }
 
 // ---------------------------------------------------------------------
+// Onboarding: business-type picker. Feeds the AI layer's calibration
+// fallback for merchants without enough transaction history yet to
+// auto-calibrate (see backend/app/ai/churn_model.py).
+// ---------------------------------------------------------------------
+
+export interface BusinessTypeOption {
+  value: string;
+  label: string;
+}
+
+export interface BusinessProfileOut {
+  business_type: string | null;
+}
+
+export function listBusinessTypes(): Promise<BusinessTypeOption[]> {
+  return request<BusinessTypeOption[]>("/settings/business-types");
+}
+
+export function getBusinessProfile(): Promise<BusinessProfileOut> {
+  return request<BusinessProfileOut>("/settings/business-profile");
+}
+
+export function updateBusinessProfile(businessType: string): Promise<BusinessProfileOut> {
+  return request<BusinessProfileOut>("/settings/business-profile", {
+    method: "PATCH",
+    body: JSON.stringify({ business_type: businessType }),
+  });
+}
+
+// ---------------------------------------------------------------------
 // Win-back worklist -- reworked from an auto-executing campaign into a
 // read-only suggestion list (see backend/app/services/winback.py). No
 // more "run", no more offer history, no more auto_trigger.

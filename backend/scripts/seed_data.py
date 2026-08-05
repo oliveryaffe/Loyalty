@@ -169,7 +169,35 @@ def cohort_purchase_plan(cohort: str, rng: random.Random, now: datetime) -> tupl
     return num_txns, last_activity_days_ago, span_days, amount_range[0], amount_range[1]
 
 
-def build_member(fake: Faker, merchant: Merchant, cohort: str) -> Member:
+# Common UK-realistic personal email providers -- used instead of Faker's
+# example.com/example.org/example.net defaults so seeded addresses read as
+# real personal emails, not obviously-fake placeholders.
+_MEMBER_EMAIL_DOMAINS = ["gmail.com", "outlook.com", "hotmail.co.uk", "icloud.com", "yahoo.co.uk"]
+
+
+def _member_email(first: str, last: str, rng: random.Random, seen_emails: set[str]) -> str:
+    """Deterministic, name-matching email -- previously this called
+    fake.unique.email(), which generates a fully random address with zero
+    connection to the member's actual name (confirmed live: e.g. a member
+    named "Sarah Jenkins" showing up with an email like
+    "xk29fhq3@example.net" on the Members page). Builds `first.last@domain`
+    lowercased instead; a numeric suffix is only appended on an actual
+    collision (two members sharing the same first+last name), so the
+    common case still looks like a real personal email address."""
+    base = "".join(ch for ch in f"{first}.{last}".lower() if ch.isalnum() or ch == ".")
+    domain = rng.choice(_MEMBER_EMAIL_DOMAINS)
+    candidate = f"{base}@{domain}"
+    suffix = 2
+    while candidate in seen_emails:
+        candidate = f"{base}{suffix}@{domain}"
+        suffix += 1
+    seen_emails.add(candidate)
+    return candidate
+
+
+def build_member(
+    fake: Faker, merchant: Merchant, cohort: str, rng: random.Random, seen_emails: set[str]
+) -> Member:
     first = fake.first_name()
     last = fake.last_name()
     tier = random.choices(
@@ -183,7 +211,7 @@ def build_member(fake: Faker, merchant: Merchant, cohort: str) -> Member:
         merchant_id=merchant.id,
         first_name=first,
         last_name=last,
-        email=fake.unique.email(),
+        email=_member_email(first, last, rng, seen_emails),
         tier=tier,
         points_balance=0,
         synthetic_cohort=cohort,
@@ -286,6 +314,7 @@ def seed(reset: bool = True) -> None:
     try:
         merchant = Merchant(
             business_name="Northwind Coffee Co.",
+            business_type="coffee_shop",
             shopify_webhook_secret=DEMO_SHOPIFY_WEBHOOK_SECRET,
             shopify_shop_domain=DEMO_SHOPIFY_SHOP_DOMAIN,
             # Stripe billing (PLAN_BATCH3.md §2): the demo merchant must have
@@ -323,9 +352,10 @@ def seed(reset: bool = True) -> None:
         print(f"Created {len(rewards)} reward catalog items.")
 
         members: list[Member] = []
+        seen_emails: set[str] = set()
         for _ in range(NUM_MEMBERS):
             cohort = pick_cohort(rng)
-            member = build_member(fake, merchant, cohort)
+            member = build_member(fake, merchant, cohort, rng, seen_emails)
             db.add(member)
             members.append(member)
         db.flush()

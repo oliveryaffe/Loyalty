@@ -2,6 +2,7 @@ import React from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { useAuth } from "../AuthContext";
+import OnboardingModal from "./OnboardingModal";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", end: true },
@@ -64,6 +65,7 @@ export default function Layout() {
       <main className="main">
         <Outlet />
       </main>
+      <OnboardingModal />
     </div>
   );
 }

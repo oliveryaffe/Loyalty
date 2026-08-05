@@ -62,6 +62,18 @@ class Merchant(Base):
     business_name: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
+    # Onboarding: which vertical this merchant is (see
+    # app.ai.churn_model.BUSINESS_TYPE_CALIBRATIONS for the values this
+    # drives). Nullable/additive; NULL doubles as "hasn't completed
+    # onboarding yet" -- the frontend shows a one-question business-type
+    # picker on first dashboard load whenever this is NULL, and stops once
+    # it's set (including to "other", which is a valid explicit answer).
+    # Feeds compute_merchant_calibration's fallback (see churn_model.py):
+    # until a merchant has enough of its own transaction history to
+    # auto-calibrate, this picks a vertical-appropriate starting point
+    # instead of always defaulting to coffee-shop-tuned thresholds.
+    business_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
     # Shopify webhook ingestion config (Feature 2). Per-merchant secret,
     # not a single global secret -- different merchants would have
     # different Shopify apps/secrets in production.

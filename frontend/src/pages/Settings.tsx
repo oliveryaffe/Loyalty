@@ -2,8 +2,12 @@ import React, { useEffect, useState } from "react";
 
 import { isApiError } from "../AuthContext";
 import {
+  BusinessTypeOption,
+  getBusinessProfile,
   getNotificationSettings,
+  listBusinessTypes,
   NotificationSettingsOut,
+  updateBusinessProfile,
   updateNotificationSettings,
 } from "../api/client";
 
@@ -27,6 +31,35 @@ export default function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const [businessTypes, setBusinessTypes] = useState<BusinessTypeOption[] | null>(null);
+  const [businessType, setBusinessType] = useState<string | null>(null);
+  const [savingBusinessType, setSavingBusinessType] = useState(false);
+  const [businessTypeError, setBusinessTypeError] = useState<string | null>(null);
+
+  function loadBusinessProfile() {
+    Promise.all([getBusinessProfile(), listBusinessTypes()])
+      .then(([profile, options]) => {
+        setBusinessType(profile.business_type);
+        setBusinessTypes(options);
+      })
+      .catch((err) =>
+        setBusinessTypeError(isApiError(err) ? err.message : "Unable to load business profile.")
+      );
+  }
+
+  async function handleBusinessTypeChange(value: string) {
+    setBusinessTypeError(null);
+    setSavingBusinessType(true);
+    try {
+      const result = await updateBusinessProfile(value);
+      setBusinessType(result.business_type);
+    } catch (err) {
+      setBusinessTypeError(isApiError(err) ? err.message : "Unable to save business type.");
+    } finally {
+      setSavingBusinessType(false);
+    }
+  }
+
   function load() {
     setLoading(true);
     getNotificationSettings()
@@ -42,6 +75,7 @@ export default function Settings() {
   }
 
   useEffect(load, []);
+  useEffect(loadBusinessProfile, []);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -66,6 +100,33 @@ export default function Settings() {
 
   return (
     <div>
+      <h2>Business Profile</h2>
+      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8 }}>
+        Sets a sensible starting point for churn risk and future-value forecasts until we've seen enough of
+        your own transaction history to calibrate automatically -- see the Insights page for how that plays
+        out once it kicks in.
+      </p>
+      {businessTypeError && <p className="error-text">{businessTypeError}</p>}
+      <div className="card" style={{ maxWidth: 520, marginBottom: 32 }}>
+        <div className="field">
+          <label>Business type</label>
+          <select
+            value={businessType ?? ""}
+            disabled={savingBusinessType || !businessTypes}
+            onChange={(e) => handleBusinessTypeChange(e.target.value)}
+          >
+            <option value="" disabled>
+              Select...
+            </option>
+            {(businessTypes ?? []).map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <h2>Notification Settings</h2>
       <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8 }}>
         Get a Slack message and/or email when a member's churn risk newly escalates to "high", or when a new

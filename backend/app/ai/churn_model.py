@@ -52,7 +52,7 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Member, Transaction, TransactionType
+from app.db.models import Member, Merchant, Transaction, TransactionType
 
 # Original tuning constants -- still the literal values used whenever a
 # merchant can't be calibrated (see DEFAULT_CALIBRATION below). Kept as
@@ -102,7 +102,7 @@ class MerchantCalibration:
     frequency_saturation: float
     monetary_saturation: float
     holdout_days: float
-    source: Literal["calibrated", "default"]
+    source: Literal["calibrated", "default", "default_vertical"]
 
 
 DEFAULT_CALIBRATION = MerchantCalibration(
@@ -113,6 +113,66 @@ DEFAULT_CALIBRATION = MerchantCalibration(
     holdout_days=float(HOLDOUT_DAYS),
     source="default",
 )
+
+# Onboarding business-type picker (see Merchant.business_type): a rough,
+# vertical-informed starting point for a merchant with too little of their
+# own transaction history yet for compute_merchant_calibration's real,
+# empirical calibration to kick in (MIN_MEMBERS_WITH_REPEAT_VISITS below).
+# These are day-one defaults, not precision-tuned against real data the
+# way DEFAULT_CALIBRATION's coffee-shop numbers were verified against the
+# seeded dataset -- they get replaced automatically the moment a merchant
+# has enough repeat-visit history, same fallback mechanism as
+# DEFAULT_CALIBRATION. `source="default_vertical"` (vs. plain "default")
+# keeps that honestly distinguishable from the true generic fallback for
+# anyone who picked "other" or hasn't onboarded yet.
+#
+# Each profile reasons from a typical repeat-visit interval for that
+# vertical using the same LOOKBACK_CYCLES/HOLDOUT_CYCLES/day-bound
+# constants real calibration uses, plus a rough UK average-ticket-size
+# assumption for the monetary bar -- not measured, just a sane starting
+# point.
+BUSINESS_TYPE_CALIBRATIONS: dict[str, MerchantCalibration] = {
+    # ~weekly habit purchase, low basket -- identical to DEFAULT_CALIBRATION,
+    # since that was originally tuned around a coffee shop.
+    "coffee_shop": MerchantCalibration(
+        lookback_days=120.0,
+        recency_saturation_days=90.0,
+        frequency_saturation=8.0,
+        monetary_saturation=400.0,
+        holdout_days=45.0,
+        source="default_vertical",
+    ),
+    # ~every 2-3 weeks, higher ticket than a coffee shop.
+    "restaurant": MerchantCalibration(
+        lookback_days=252.0,
+        recency_saturation_days=150.0,
+        frequency_saturation=6.0,
+        monetary_saturation=250.0,
+        holdout_days=84.0,
+        source="default_vertical",
+    ),
+    # ~every 5-6 weeks (haircut regrowth cycle), mid ticket.
+    "barber_salon": MerchantCalibration(
+        lookback_days=MAX_LOOKBACK_DAYS,
+        recency_saturation_days=180.0,
+        frequency_saturation=5.0,
+        monetary_saturation=150.0,
+        holdout_days=140.0,
+        source="default_vertical",
+    ),
+    # ~quarterly, higher ticket, low visit frequency by design.
+    "retail": MerchantCalibration(
+        lookback_days=MAX_LOOKBACK_DAYS,
+        recency_saturation_days=MAX_RECENCY_DAYS,
+        frequency_saturation=2.0,
+        monetary_saturation=180.0,
+        holdout_days=MAX_HOLDOUT_DAYS,
+        source="default_vertical",
+    ),
+    # "other"/unset intentionally omitted -- falls through to
+    # DEFAULT_CALIBRATION in compute_merchant_calibration below, same as a
+    # merchant that never picked a business type at all.
+}
 
 
 @dataclass
@@ -149,7 +209,12 @@ def compute_merchant_calibration(
     """Derive this merchant's own RFM/future-value thresholds from its
     transaction history. See module docstring for the two-step method and
     why the saturation points are measured empirically rather than derived
-    algebraically from the gap statistic alone."""
+    algebraically from the gap statistic alone.
+
+    Falls back to BUSINESS_TYPE_CALIBRATIONS[merchant.business_type] (or
+    DEFAULT_CALIBRATION if unset/unrecognised) when there isn't enough
+    repeat-visit history yet -- see Merchant.business_type and the
+    BUSINESS_TYPE_CALIBRATIONS docstring above."""
     now = now or datetime.now(timezone.utc)
 
     members = db.query(Member).filter(Member.merchant_id == merchant_id).all()
@@ -182,7 +247,9 @@ def compute_merchant_calibration(
             per_member_median_gap.append(statistics.median(gaps))
 
     if len(per_member_median_gap) < MIN_MEMBERS_WITH_REPEAT_VISITS:
-        return DEFAULT_CALIBRATION
+        merchant = db.get(Merchant, merchant_id)
+        business_type = merchant.business_type if merchant is not None else None
+        return BUSINESS_TYPE_CALIBRATIONS.get(business_type, DEFAULT_CALIBRATION)
 
     median_interval = max(statistics.median(per_member_median_gap), 0.5)
     lookback_days = _clamp(median_interval * LOOKBACK_CYCLES, MIN_LOOKBACK_DAYS, MAX_LOOKBACK_DAYS)
