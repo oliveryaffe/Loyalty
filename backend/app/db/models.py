@@ -114,6 +114,25 @@ class Merchant(Base):
     notify_on_churn_risk: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     notify_on_fraud_alert: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
+    # Weekly passive insight digest (competitive-brief backlog item #2:
+    # most competitors assume a merchant logs into a dashboard regularly:
+    # a single-location owner doesn't have that habit, so this pushes a
+    # summary out instead of waiting to be pulled). Opt-IN, unlike the two
+    # notification toggles above -- those default a NULL row to "on"
+    # because they're alerting on something already happening (a member
+    # escalating to high risk, a fraud alert); this is a new proactive
+    # weekly message nobody asked for yet, so NULL must mean "off" until a
+    # merchant explicitly turns it on (see
+    # app/services/digest.py::wants_weekly_digest, which treats NULL/False
+    # identically -- never `is not False` like the two toggles above).
+    # `last_digest_sent_at` powers the once-every-7-days due check; there
+    # is no scheduler in this codebase (see app/api/ai.py's module
+    # docstring), so -- same pattern as churn-escalation notifications --
+    # sending piggybacks on GET /ai/churn, the endpoint the dashboard
+    # already calls on every load.
+    notify_weekly_digest: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    last_digest_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     members: Mapped[list["Member"]] = relationship(back_populates="merchant")
     rewards: Mapped[list["RewardCatalogItem"]] = relationship(back_populates="merchant")
     team_members: Mapped[list["TeamMember"]] = relationship(

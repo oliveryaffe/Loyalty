@@ -40,7 +40,7 @@ from app.db.models import Merchant, UsageEvent
 # exact two call sites that create these ("csv_upload" and
 # "report_download"). Any kind added in future counts as a plain insight
 # run for billing purposes; there is deliberately no per-kind pricing.
-INSIGHT_RUN_KINDS = ("csv_upload", "report_download")
+INSIGHT_RUN_KINDS = ("csv_upload", "report_download", "weekly_digest")
 
 
 @dataclass(frozen=True)

@@ -14,6 +14,7 @@ class NotificationSettingsOut(BaseModel):
     notification_email: str | None
     notify_on_churn_risk: bool
     notify_on_fraud_alert: bool
+    notify_weekly_digest: bool
 
 
 class NotificationSettingsUpdate(BaseModel):
@@ -31,6 +32,7 @@ class NotificationSettingsUpdate(BaseModel):
     notification_email: EmailStr | None = None
     notify_on_churn_risk: bool | None = None
     notify_on_fraud_alert: bool | None = None
+    notify_weekly_digest: bool | None = None
 
 
 class BusinessTypeOption(BaseModel):

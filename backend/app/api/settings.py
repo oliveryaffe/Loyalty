@@ -23,6 +23,7 @@ from app.schemas.settings import (
     NotificationSettingsOut,
     NotificationSettingsUpdate,
 )
+from app.services.digest import wants_weekly_digest
 from app.services.notifications import wants_churn_notifications, wants_fraud_notifications
 
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
@@ -56,6 +57,7 @@ def _to_out(merchant: Merchant) -> NotificationSettingsOut:
         notification_email=merchant.notification_email,
         notify_on_churn_risk=wants_churn_notifications(merchant),
         notify_on_fraud_alert=wants_fraud_notifications(merchant),
+        notify_weekly_digest=wants_weekly_digest(merchant),
     )
 
 
@@ -83,6 +85,8 @@ def update_notification_settings(
         merchant.notify_on_churn_risk = data["notify_on_churn_risk"]
     if "notify_on_fraud_alert" in data:
         merchant.notify_on_fraud_alert = data["notify_on_fraud_alert"]
+    if "notify_weekly_digest" in data:
+        merchant.notify_weekly_digest = data["notify_weekly_digest"]
 
     db.commit()
     db.refresh(merchant)

@@ -12,6 +12,7 @@ from app.api import (
     ai,
     auth,
     billing,
+    digest,
     experiments,
     gdpr,
     insights,
@@ -67,3 +68,4 @@ app.include_router(settings_api.router)
 app.include_router(winback.router)
 app.include_router(experiments.router)
 app.include_router(gdpr.router)
+app.include_router(digest.router)

@@ -9,7 +9,15 @@ itself happens via FastAPI `BackgroundTasks` so a slow/down Slack endpoint
 never delays these responses. Win-back (app/services/winback.py) is a
 separate, read-only worklist computed on demand at GET /winback/worklist
 -- it doesn't hook into this recompute path at all anymore.
+
+Same reasoning extends the weekly digest (app/services/digest.py):
+`get_churn_scores` also checks whether a merchant's digest is due (opted
+in + 7+ days since the last send) and fires it as a background task if
+so -- the dashboard load that already happens is the only "trigger" this
+passive feature needs.
 """
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -20,6 +28,7 @@ from app.api.deps import require_active_subscription
 from app.db.base import get_db
 from app.db.models import FraudAlert, Member, Merchant
 from app.schemas.ai import ChurnScoreOut, FraudAlertOut, RecommendationOut
+from app.services.digest import compute_weekly_digest, format_digest_email, is_digest_due, wants_weekly_digest
 from app.services.notifications import (
     check_churn_escalations,
     format_member_bullet_list,
@@ -27,6 +36,7 @@ from app.services.notifications import (
     wants_churn_notifications,
     wants_fraud_notifications,
 )
+from app.services.usage import record_usage_event
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 
 
@@ -78,6 +88,13 @@ def get_churn_scores(
             [f"{m.first_name} {m.last_name}" for m in escalated]
         )
         notify_merchant(merchant, subject, body, background_tasks)
+
+    if wants_weekly_digest(merchant) and is_digest_due(merchant):
+        digest = compute_weekly_digest(db, merchant)
+        digest_subject, digest_body = format_digest_email(digest, merchant.business_name)
+        notify_merchant(merchant, digest_subject, digest_body, background_tasks)
+        merchant.last_digest_sent_at = datetime.now(timezone.utc)
+        record_usage_event(db, merchant, "weekly_digest")
 
     db.commit()
 

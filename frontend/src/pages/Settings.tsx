@@ -3,14 +3,18 @@ import React, { useEffect, useState } from "react";
 import { isApiError } from "../AuthContext";
 import {
   BusinessTypeOption,
+  DigestStatusOut,
   getBusinessProfile,
+  getDigestStatus,
   getNotificationSettings,
   listBusinessTypes,
   NotificationSettingsOut,
   resetBusinessProfile,
+  sendDigestNow,
   updateBusinessProfile,
   updateNotificationSettings,
 } from "../api/client";
+import { formatDateUK } from "../utils";
 
 /**
  * Notification settings (PLAN_BATCH3.md §3): self-serve Slack webhook URL +
@@ -26,10 +30,16 @@ export default function Settings() {
   const [email, setEmail] = useState("");
   const [notifyChurn, setNotifyChurn] = useState(true);
   const [notifyFraud, setNotifyFraud] = useState(true);
+  const [notifyDigest, setNotifyDigest] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  const [digestStatus, setDigestStatus] = useState<DigestStatusOut | null>(null);
+  const [sendingDigest, setSendingDigest] = useState(false);
+  const [digestSentJustNow, setDigestSentJustNow] = useState(false);
+  const [digestError, setDigestError] = useState<string | null>(null);
 
   const [businessTypes, setBusinessTypes] = useState<BusinessTypeOption[] | null>(null);
   const [businessType, setBusinessType] = useState<string | null>(null);
@@ -103,13 +113,36 @@ export default function Settings() {
         setEmail(s.notification_email ?? "");
         setNotifyChurn(s.notify_on_churn_risk);
         setNotifyFraud(s.notify_on_fraud_alert);
+        setNotifyDigest(s.notify_weekly_digest);
       })
       .catch((err) => setError(isApiError(err) ? err.message : "Unable to load notification settings."))
       .finally(() => setLoading(false));
   }
 
+  function loadDigestStatus() {
+    getDigestStatus()
+      .then(setDigestStatus)
+      .catch((err) => setDigestError(isApiError(err) ? err.message : "Unable to load digest status."));
+  }
+
+  async function handleSendDigestNow() {
+    setDigestError(null);
+    setDigestSentJustNow(false);
+    setSendingDigest(true);
+    try {
+      await sendDigestNow();
+      setDigestSentJustNow(true);
+      loadDigestStatus();
+    } catch (err) {
+      setDigestError(isApiError(err) ? err.message : "Unable to send digest.");
+    } finally {
+      setSendingDigest(false);
+    }
+  }
+
   useEffect(load, []);
   useEffect(loadBusinessProfile, []);
+  useEffect(loadDigestStatus, []);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -122,9 +155,11 @@ export default function Settings() {
         notification_email: email.trim() === "" ? null : email.trim(),
         notify_on_churn_risk: notifyChurn,
         notify_on_fraud_alert: notifyFraud,
+        notify_weekly_digest: notifyDigest,
       });
       setSettings(result);
       setSaved(true);
+      loadDigestStatus();
     } catch (err) {
       setError(isApiError(err) ? err.message : "Unable to save notification settings.");
     } finally {
@@ -227,6 +262,10 @@ export default function Settings() {
             <input type="checkbox" checked={notifyFraud} onChange={(e) => setNotifyFraud(e.target.checked)} />
             Notify on new fraud alerts
           </label>
+          <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, color: "var(--text-secondary)" }}>
+            <input type="checkbox" checked={notifyDigest} onChange={(e) => setNotifyDigest(e.target.checked)} />
+            Send me a weekly digest (who's at risk, predicted value, this week's biggest opportunity)
+          </label>
           <div>
             <button className="primary" style={{ width: "auto", padding: "8px 20px" }} type="submit" disabled={saving}>
               {saving ? "Saving..." : "Save settings"}
@@ -245,6 +284,43 @@ export default function Settings() {
           )}
         </form>
       )}
+
+      <h2 style={{ marginTop: 32 }}>Weekly Digest</h2>
+      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8 }}>
+        A short summary -- who's at risk, what your current members are worth going forward, and this
+        week's biggest opportunity -- sent to whichever Slack/email channel is configured above. Fires
+        automatically once a week (no login required) once turned on above; use the button below to send
+        yourself a preview any time.
+      </p>
+      {digestError && <p className="error-text">{digestError}</p>}
+      <div className="card" style={{ maxWidth: 520 }}>
+        {digestStatus ? (
+          <>
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 0 }}>
+              Status: {digestStatus.enabled ? "on" : "off"}
+              {digestStatus.enabled && !digestStatus.has_notification_channel && " -- add a Slack URL or email above to actually receive it"}
+            </p>
+            <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+              Last sent: {digestStatus.last_digest_sent_at ? formatDateUK(digestStatus.last_digest_sent_at) : "never"}
+            </p>
+          </>
+        ) : (
+          <p className="loading">Loading digest status...</p>
+        )}
+        <button
+          type="button"
+          className="secondary"
+          onClick={handleSendDigestNow}
+          disabled={sendingDigest}
+        >
+          {sendingDigest ? "Sending..." : "Send digest now"}
+        </button>
+        {digestSentJustNow && !digestError && (
+          <p style={{ color: "var(--mint)", fontSize: 13, marginTop: 8, marginBottom: 0 }}>
+            Digest sent{digestStatus && !digestStatus.has_notification_channel ? " (computed, but no Slack/email configured to deliver it to)" : ""}.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

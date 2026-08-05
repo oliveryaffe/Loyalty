@@ -456,6 +456,7 @@ export interface NotificationSettingsOut {
   notification_email: string | null;
   notify_on_churn_risk: boolean;
   notify_on_fraud_alert: boolean;
+  notify_weekly_digest: boolean;
 }
 
 export interface NotificationSettingsUpdate {
@@ -463,6 +464,7 @@ export interface NotificationSettingsUpdate {
   notification_email?: string | null;
   notify_on_churn_risk?: boolean;
   notify_on_fraud_alert?: boolean;
+  notify_weekly_digest?: boolean;
 }
 
 export function getNotificationSettings(): Promise<NotificationSettingsOut> {
@@ -476,6 +478,49 @@ export function updateNotificationSettings(
     method: "PATCH",
     body: JSON.stringify(payload),
   });
+}
+
+// ---------------------------------------------------------------------
+// Weekly digest
+// ---------------------------------------------------------------------
+
+export interface DigestAtRiskMemberOut {
+  member_id: string;
+  name: string;
+  recency_days: number;
+}
+
+export interface WeeklyDigestOut {
+  generated_at: string;
+  total_members: number;
+  at_risk_count: number;
+  at_risk_members: DigestAtRiskMemberOut[];
+  predicted_value_90d: number;
+  top_opportunity: string;
+  headline: string;
+}
+
+export interface DigestSendResult {
+  sent_via: string[];
+  last_digest_sent_at: string;
+}
+
+export interface DigestStatusOut {
+  enabled: boolean;
+  last_digest_sent_at: string | null;
+  has_notification_channel: boolean;
+}
+
+export function getDigestStatus(): Promise<DigestStatusOut> {
+  return request<DigestStatusOut>("/digest/status");
+}
+
+export function previewDigest(): Promise<WeeklyDigestOut> {
+  return request<WeeklyDigestOut>("/digest/preview");
+}
+
+export function sendDigestNow(): Promise<DigestSendResult> {
+  return request<DigestSendResult>("/digest/send", { method: "POST" });
 }
 
 // ---------------------------------------------------------------------
