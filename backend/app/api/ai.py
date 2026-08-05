@@ -29,6 +29,7 @@ from app.db.base import get_db
 from app.db.models import FraudAlert, Member, Merchant
 from app.schemas.ai import ChurnScoreOut, FraudAlertOut, RecommendationOut
 from app.services.digest import compute_weekly_digest, format_digest_email, is_digest_due, wants_weekly_digest
+from app.services.winback import get_suggested_winback_reward
 from app.services.notifications import (
     check_churn_escalations,
     format_member_bullet_list,
@@ -84,9 +85,18 @@ def get_churn_scores(
     escalated = check_churn_escalations(db, merchant, results)
     if escalated and wants_churn_notifications(merchant):
         subject = f"{len(escalated)} member(s) just escalated to high churn risk"
-        body = format_member_bullet_list(
-            [f"{m.first_name} {m.last_name}" for m in escalated]
-        )
+        # Enriches the alert with the merchant's saved win-back reward
+        # suggestion (competitor research: Zinrelo/Antavo pair an at-risk
+        # alert with a recommended incentive). Still read-only/suggestion
+        # -- nothing is sent to the member and nothing is granted, same
+        # "Ledgerly isn't the system of record" boundary as
+        # app/services/winback.py itself; this just puts the suggestion
+        # in front of the person who'll act on it a few seconds sooner.
+        suggested_reward = get_suggested_winback_reward(db, merchant)
+        names = [f"{m.first_name} {m.last_name}" for m in escalated]
+        if suggested_reward is not None:
+            names = [f"{name} -- suggested offer: {suggested_reward.name}" for name in names]
+        body = format_member_bullet_list(names)
         notify_merchant(merchant, subject, body, background_tasks)
 
     if wants_weekly_digest(merchant) and is_digest_due(merchant):

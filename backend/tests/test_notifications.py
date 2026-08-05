@@ -184,6 +184,65 @@ def test_churn_escalation_triggers_exactly_one_slack_notification(client, db_ses
     assert member.risk_escalated_notified_at is not None
 
 
+def test_churn_escalation_includes_suggested_winback_reward_when_configured(
+    client, db_session, admin_headers, monkeypatch
+):
+    """Competitor-research-driven enrichment: the escalation alert should
+    surface the merchant's saved win-back reward suggestion (same one
+    GET /winback/worklist would show) inline, not just a bare name --
+    without granting anything or messaging the member directly (see
+    app/services/winback.py's module docstring for why the latter is out
+    of scope)."""
+    merchant_id = _merchant_id(client, admin_headers)
+    client.patch(
+        "/api/v1/settings/notifications", json={"notification_slack_webhook_url": SLACK_URL}, headers=admin_headers
+    )
+    reward_resp = client.post(
+        "/api/v1/rewards",
+        json={"name": "Free Coffee", "points_cost": 150, "tier_required": "bronze"},
+        headers=admin_headers,
+    )
+    assert reward_resp.status_code == 201
+    reward_id = reward_resp.json()["id"]
+    rule_resp = client.put(
+        "/api/v1/winback/rule",
+        json={"enabled": True, "churn_risk_threshold": 65.0, "reward_id": reward_id},
+        headers=admin_headers,
+    )
+    assert rule_resp.status_code == 200
+
+    calls = _capture_slack(monkeypatch)
+    member = _make_stale_member(db_session, merchant_id)
+
+    resp = client.get("/api/v1/ai/churn", headers=admin_headers)
+    assert resp.status_code == 200
+
+    assert len(calls) == 1
+    text = calls[0]["json"]["text"]
+    assert member.first_name in text
+    assert "Free Coffee" in text
+    assert "suggested offer" in text.lower()
+
+
+def test_churn_escalation_without_winback_rule_has_plain_names(client, db_session, admin_headers, monkeypatch):
+    """No rule saved -- alert stays exactly as it was before this
+    enrichment, no 'suggested offer' text at all."""
+    merchant_id = _merchant_id(client, admin_headers)
+    client.patch(
+        "/api/v1/settings/notifications", json={"notification_slack_webhook_url": SLACK_URL}, headers=admin_headers
+    )
+    calls = _capture_slack(monkeypatch)
+    member = _make_stale_member(db_session, merchant_id)
+
+    resp = client.get("/api/v1/ai/churn", headers=admin_headers)
+    assert resp.status_code == 200
+
+    assert len(calls) == 1
+    text = calls[0]["json"]["text"]
+    assert member.first_name in text
+    assert "suggested offer" not in text.lower()
+
+
 def test_churn_escalation_second_request_within_cooldown_sends_nothing_more(
     client, db_session, admin_headers, monkeypatch
 ):

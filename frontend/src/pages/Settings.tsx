@@ -7,12 +7,17 @@ import {
   getBusinessProfile,
   getDigestStatus,
   getNotificationSettings,
+  getWinbackRule,
   listBusinessTypes,
+  listRewards,
   NotificationSettingsOut,
   resetBusinessProfile,
+  RewardOut,
   sendDigestNow,
   updateBusinessProfile,
   updateNotificationSettings,
+  updateWinbackRule,
+  WinbackRuleOut,
 } from "../api/client";
 import { formatDateUK } from "../utils";
 
@@ -40,6 +45,14 @@ export default function Settings() {
   const [sendingDigest, setSendingDigest] = useState(false);
   const [digestSentJustNow, setDigestSentJustNow] = useState(false);
   const [digestError, setDigestError] = useState<string | null>(null);
+
+  const [rewards, setRewards] = useState<RewardOut[] | null>(null);
+  const [winbackRule, setWinbackRule] = useState<WinbackRuleOut | null>(null);
+  const [winbackRewardId, setWinbackRewardId] = useState("");
+  const [winbackThreshold, setWinbackThreshold] = useState(65);
+  const [savingWinback, setSavingWinback] = useState(false);
+  const [winbackSaved, setWinbackSaved] = useState(false);
+  const [winbackError, setWinbackError] = useState<string | null>(null);
 
   const [businessTypes, setBusinessTypes] = useState<BusinessTypeOption[] | null>(null);
   const [businessType, setBusinessType] = useState<string | null>(null);
@@ -125,6 +138,41 @@ export default function Settings() {
       .catch((err) => setDigestError(isApiError(err) ? err.message : "Unable to load digest status."));
   }
 
+  function loadWinback() {
+    Promise.all([listRewards(), getWinbackRule()])
+      .then(([rewardList, rule]) => {
+        setRewards(rewardList);
+        setWinbackRule(rule);
+        setWinbackRewardId(rule.reward_id ?? "");
+        setWinbackThreshold(rule.churn_risk_threshold);
+      })
+      .catch((err) => setWinbackError(isApiError(err) ? err.message : "Unable to load win-back suggestion."));
+  }
+
+  async function handleSaveWinback(e: React.FormEvent) {
+    e.preventDefault();
+    if (!winbackRewardId) {
+      setWinbackError("Pick a reward to suggest first.");
+      return;
+    }
+    setWinbackError(null);
+    setWinbackSaved(false);
+    setSavingWinback(true);
+    try {
+      const result = await updateWinbackRule({
+        enabled: true,
+        churn_risk_threshold: winbackThreshold,
+        reward_id: winbackRewardId,
+      });
+      setWinbackRule(result);
+      setWinbackSaved(true);
+    } catch (err) {
+      setWinbackError(isApiError(err) ? err.message : "Unable to save win-back suggestion.");
+    } finally {
+      setSavingWinback(false);
+    }
+  }
+
   async function handleSendDigestNow() {
     setDigestError(null);
     setDigestSentJustNow(false);
@@ -143,6 +191,7 @@ export default function Settings() {
   useEffect(load, []);
   useEffect(loadBusinessProfile, []);
   useEffect(loadDigestStatus, []);
+  useEffect(loadWinback, []);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -224,8 +273,9 @@ export default function Settings() {
       <h2>Notification Settings</h2>
       <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8 }}>
         Get a Slack message and/or email when a customer's churn risk newly escalates to "high", or when a new
-        fraud alert is detected. Fires the next time the Customers or Fraud Alerts page (or a manual re-run) is
-        loaded -- there is no background scheduler.
+        fraud alert is detected. If you've set a suggested win-back reward below, the churn alert includes it
+        inline. Fires the next time the Customers or Fraud Alerts page (or a manual re-run) is loaded -- there is
+        no background scheduler.
       </p>
       {error && <p className="error-text">{error}</p>}
       {saved && !error && (
@@ -280,6 +330,66 @@ export default function Settings() {
             <p className="hint" style={{ marginTop: 0 }}>
               No delivery method configured yet -- notifications are computed but not sent until you add a Slack
               URL and/or email above.
+            </p>
+          )}
+        </form>
+      )}
+
+      <h2 style={{ marginTop: 32 }}>Win-back Suggestion</h2>
+      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8 }}>
+        Pick one reward from your catalog to suggest whenever a customer crosses the churn-risk threshold below --
+        it's included inline in the churn alert above and on the Customers page's at-risk filter. This is a
+        suggestion only; Ledgerly never grants or sends the reward itself, you comp it in whatever till or loyalty
+        tool you already use.
+      </p>
+      {winbackError && <p className="error-text">{winbackError}</p>}
+      {winbackSaved && !winbackError && (
+        <p style={{ color: "var(--mint)", fontSize: 13 }}>Win-back suggestion saved.</p>
+      )}
+      {rewards === null ? (
+        <p className="loading">Loading rewards...</p>
+      ) : rewards.length === 0 ? (
+        <div className="card" style={{ maxWidth: 520 }}>
+          <p className="hint" style={{ marginTop: 0, marginBottom: 0 }}>
+            No rewards in your catalog yet -- add one on the Rewards page first, then come back here to suggest it
+            for at-risk customers.
+          </p>
+        </div>
+      ) : (
+        <form onSubmit={handleSaveWinback} className="card" style={{ maxWidth: 520, display: "grid", gap: 14 }}>
+          <div className="field">
+            <label>Suggested reward</label>
+            <select value={winbackRewardId} onChange={(e) => setWinbackRewardId(e.target.value)}>
+              <option value="" disabled>
+                Select a reward...
+              </option>
+              {rewards.filter((r) => r.active).map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Churn risk threshold ({winbackThreshold})</label>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={winbackThreshold}
+              onChange={(e) => setWinbackThreshold(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <button className="primary" style={{ width: "auto", padding: "8px 20px" }} type="submit" disabled={savingWinback}>
+              {savingWinback ? "Saving..." : "Save suggestion"}
+            </button>
+          </div>
+          {winbackRule?.reward_id && (
+            <p className="hint" style={{ marginTop: 0 }}>
+              Currently suggesting "{rewards.find((r) => r.id === winbackRule.reward_id)?.name ?? "a reward"}" for
+              customers at or above {winbackRule.churn_risk_threshold} churn risk.
             </p>
           )}
         </form>

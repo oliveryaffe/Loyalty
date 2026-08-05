@@ -40,6 +40,19 @@ class WinbackWorklistEntry:
     suggested_reward_name: str | None
 
 
+def get_suggested_winback_reward(db: Session, merchant: Merchant) -> RewardCatalogItem | None:
+    """The merchant's saved win-back reward suggestion, if any -- shared
+    by get_winback_worklist below and, separately, the churn-escalation
+    notification (app/api/ai.py) so the same suggestion appears whether a
+    merchant checks the worklist or gets pinged on Slack/email. Still
+    read-only/suggestion-only: nothing here grants or sends anything, see
+    module docstring."""
+    rule = db.query(WinbackRule).filter(WinbackRule.merchant_id == merchant.id).first()
+    if rule is None or not rule.reward_id:
+        return None
+    return db.get(RewardCatalogItem, rule.reward_id)
+
+
 def get_winback_worklist(db: Session, merchant: Merchant) -> list[WinbackWorklistEntry]:
     """Members at or above the merchant's saved churn-risk threshold (or
     DEFAULT_THRESHOLD if no rule has been saved yet), highest risk first,
@@ -57,9 +70,7 @@ def get_winback_worklist(db: Session, merchant: Merchant) -> list[WinbackWorklis
     rule = db.query(WinbackRule).filter(WinbackRule.merchant_id == merchant.id).first()
     threshold = rule.churn_risk_threshold if rule is not None else DEFAULT_THRESHOLD
 
-    reward = None
-    if rule is not None and rule.reward_id:
-        reward = db.get(RewardCatalogItem, rule.reward_id)
+    reward = get_suggested_winback_reward(db, merchant)
 
     results = score_all_members(db, merchant.id)
     at_risk = [r for r in results if r.churn_risk_score >= threshold]

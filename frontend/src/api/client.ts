@@ -573,6 +573,41 @@ export function sendDigestNow(): Promise<DigestSendResult> {
 }
 
 // ---------------------------------------------------------------------
+// Win-back reward suggestion. The dedicated Win-back page was folded into
+// the Members "at-risk" filter (see pages/Members.tsx), but the rule
+// itself -- which reward to suggest, and at what churn-risk threshold --
+// still needs somewhere to be set. It's surfaced as a compact control in
+// Settings, next to the notification settings it enriches: when a churn
+// escalation alert fires, the suggested reward is included inline (see
+// backend/app/api/ai.py + app/services/winback.py).
+// ---------------------------------------------------------------------
+
+export interface WinbackRuleOut {
+  id: string | null;
+  merchant_id: string;
+  enabled: boolean;
+  churn_risk_threshold: number;
+  reward_id: string | null;
+}
+
+export interface WinbackRuleIn {
+  enabled: boolean;
+  churn_risk_threshold: number;
+  reward_id: string;
+}
+
+export function getWinbackRule(): Promise<WinbackRuleOut> {
+  return request<WinbackRuleOut>("/winback/rule");
+}
+
+export function updateWinbackRule(payload: WinbackRuleIn): Promise<WinbackRuleOut> {
+  return request<WinbackRuleOut>("/winback/rule", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+// ---------------------------------------------------------------------
 // Onboarding: business-type picker. Feeds the AI layer's calibration
 // fallback for merchants without enough transaction history yet to
 // auto-calibrate (see backend/app/ai/churn_model.py).
