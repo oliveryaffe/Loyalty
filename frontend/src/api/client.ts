@@ -120,6 +120,8 @@ export interface MemberWithChurn {
   churn_risk_score: number | null;
   churn_risk_band: string | null;
   churn_risk_explanation: string | null;
+  predicted_next_visit_date: string | null;
+  next_visit_days_overdue: number | null;
 }
 
 export interface MemberCreate {

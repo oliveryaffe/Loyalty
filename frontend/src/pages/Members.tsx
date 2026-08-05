@@ -20,7 +20,8 @@ type SortKey =
   | "tier"
   | "points_balance"
   | "churn_risk_score"
-  | "last_activity_at";
+  | "last_activity_at"
+  | "next_visit_days_overdue";
 
 type RiskFilter = "all" | "high" | "medium" | "low";
 
@@ -110,6 +111,13 @@ export default function Members() {
         case "last_activity_at":
           av = a.last_activity_at;
           bv = b.last_activity_at;
+          break;
+        case "next_visit_days_overdue":
+          // Most-overdue first when sorting this column -- members with
+          // no prediction yet sort last, not first (a null shouldn't
+          // outrank someone who's genuinely 40 days overdue).
+          av = a.next_visit_days_overdue ?? -1;
+          bv = b.next_visit_days_overdue ?? -1;
           break;
         case "churn_risk_score":
         default:
@@ -212,6 +220,9 @@ export default function Members() {
               <th onClick={() => toggleSort("last_activity_at")}>
                 Last Activity
               </th>
+              <th onClick={() => toggleSort("next_visit_days_overdue")}>
+                Next Visit
+              </th>
               <th onClick={() => toggleSort("churn_risk_score")}>
                 Churn Risk
               </th>
@@ -231,6 +242,20 @@ export default function Members() {
                 <td>{m.tier}</td>
                 <td>{m.points_balance.toLocaleString()}</td>
                 <td>{formatDateUK(m.last_activity_at)}</td>
+                <td>
+                  {m.predicted_next_visit_date ? (
+                    <>
+                      {formatDateUK(m.predicted_next_visit_date)}
+                      {m.next_visit_days_overdue !== null && (
+                        <div style={{ fontSize: 11, color: "var(--coral)", marginTop: 2 }}>
+                          {m.next_visit_days_overdue}d overdue
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <span style={{ color: "var(--text-muted)" }}>Not enough history</span>
+                  )}
+                </td>
                 <td style={{ minWidth: 220, maxWidth: 320 }}>
                   <div>
                     <RiskBadge band={m.churn_risk_band} />{" "}

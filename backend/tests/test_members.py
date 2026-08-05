@@ -35,6 +35,25 @@ def test_create_and_list_members(client, auth_headers):
     assert members[0]["churn_risk_score"] is not None
 
 
+def test_list_members_includes_next_visit_prediction_fields(client, auth_headers):
+    create_resp = client.post(
+        "/api/v1/members",
+        json={"first_name": "Ada", "last_name": "Lovelace", "email": "ada@example.com"},
+        headers=auth_headers,
+    )
+    assert create_resp.status_code == 201
+
+    list_resp = client.get("/api/v1/members", headers=auth_headers)
+    assert list_resp.status_code == 200
+    member = list_resp.json()[0]
+    # Fields must be present in the response shape even when there's not
+    # enough purchase history yet to predict anything (brand-new member,
+    # zero transactions) -- should read as null, not be missing.
+    assert "predicted_next_visit_date" in member
+    assert "next_visit_days_overdue" in member
+    assert member["predicted_next_visit_date"] is None
+
+
 def test_get_single_member_includes_churn(client, auth_headers):
     create_resp = client.post(
         "/api/v1/members",

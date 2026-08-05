@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, EmailStr
 
@@ -45,3 +45,10 @@ class MemberWithChurn(MemberOut):
     # app/ai/churn_model.py::explain_churn_risk. None whenever churn
     # scoring wasn't requested (include_churn=False) or hasn't run yet.
     churn_risk_explanation: str | None = None
+    # Predicted next visit/order date (competitor research finding --
+    # Klaviyo surfaces this alongside churn risk/CLV). See
+    # app/ai/next_visit.py. None whenever there isn't enough purchase
+    # history yet (this member's own, or the merchant's, if this is a
+    # very new account) to estimate a rhythm.
+    predicted_next_visit_date: date | None = None
+    next_visit_days_overdue: int | None = None

@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.ai.churn_model import compute_merchant_calibration, score_member_churn
+from app.ai.next_visit import predict_next_visit_for_all_members
 from app.api.deps import require_active_subscription, require_admin
 from app.db.base import get_db
 from app.db.models import (
@@ -49,6 +50,10 @@ def list_members(
     # (see churn_model.py) -- compute it once per request, not once per
     # member in the loop below.
     calibration = compute_merchant_calibration(db, merchant.id) if include_churn else None
+    # Computed once for the whole merchant, same "don't recompute a
+    # merchant-wide aggregate per member" shape as calibration above --
+    # see app/ai/next_visit.py.
+    next_visits = {p.member_id: p for p in predict_next_visit_for_all_members(db, merchant.id)}
     for m in members:
         out = MemberWithChurn.model_validate(m)
         if include_churn:
@@ -56,6 +61,10 @@ def list_members(
             out.churn_risk_score = churn.churn_risk_score
             out.churn_risk_band = churn.risk_band
             out.churn_risk_explanation = churn.explanation
+        next_visit = next_visits.get(m.id)
+        if next_visit is not None:
+            out.predicted_next_visit_date = next_visit.predicted_next_visit_date
+            out.next_visit_days_overdue = next_visit.days_overdue
         results.append(out)
     return results
 
@@ -135,6 +144,16 @@ def get_member(
     out.churn_risk_score = churn.churn_risk_score
     out.churn_risk_band = churn.risk_band
     out.churn_risk_explanation = churn.explanation
+
+    # Single-member call site -- reuses the same merchant-wide fallback
+    # computation as the list endpoint, just scoped to one member's
+    # response instead of building the whole dict (see
+    # app/ai/next_visit.py's docstring for the fallback rationale).
+    all_next_visits = predict_next_visit_for_all_members(db, merchant.id)
+    next_visit = next((p for p in all_next_visits if p.member_id == member.id), None)
+    if next_visit is not None:
+        out.predicted_next_visit_date = next_visit.predicted_next_visit_date
+        out.next_visit_days_overdue = next_visit.days_overdue
     return out
 
 
