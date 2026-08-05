@@ -218,7 +218,7 @@ export default function Dashboard() {
             <section>
               <div className="toolbar">
                 <h3 style={{ margin: 0 }}>Recent Activity</h3>
-                <Link to="/members">View members &rarr;</Link>
+                <Link to="/members">View customers &rarr;</Link>
               </div>
               {transactions!.length === 0 ? (
                 <p className="empty">No activity yet.</p>

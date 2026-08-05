@@ -301,7 +301,7 @@ export default function Insights() {
         <div className="upload-banner">
           <strong>Upload complete.</strong> {uploadResult.rows_ingested} ingested,{" "}
           {uploadResult.rows_skipped_duplicate} duplicate,{" "}
-          {uploadResult.rows_failed} failed, {uploadResult.members_created} new member(s) created.
+          {uploadResult.rows_failed} failed, {uploadResult.members_created} new customer(s) created.
           {uploadResult.errors.length > 0 && (
             <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
               {uploadResult.errors.slice(0, 5).map((e, i) => (

@@ -50,13 +50,19 @@ export default function Rewards() {
 
   return (
     <div>
-      <h2>Recommendation Categories</h2>
-      <p style={{ color: "#94a3b8", fontSize: 13, maxWidth: 640, marginTop: -8, marginBottom: 20 }}>
-        This isn't a separate rewards system to run -- it's what powers the AI's
-        suggestions on the Insights page (which offer to recommend for which member).
-        Mirror the tiers and point costs from whatever loyalty program you already
-        run (Square, Loyalzoo, Stamp Me, or your own) so the recommendations line up
-        with what you can actually redeem.
+      <h2>Reward Categories</h2>
+      <p style={{ color: "#94a3b8", fontSize: 13, maxWidth: 640, marginTop: -8, marginBottom: 8 }}>
+        This isn't a separate rewards system to run -- it's how you tell Ledgerly what
+        you're able to give a customer, so the AI can recommend something you can
+        actually redeem instead of a generic category.
+      </p>
+      <p style={{ color: "#94a3b8", fontSize: 13, maxWidth: 640, marginTop: 0, marginBottom: 20 }}>
+        <strong style={{ color: "#f5f6fa" }}>If you already run a loyalty or rewards programme</strong>{" "}
+        (Square, Loyalzoo, Stamp Me, or your own), add each tier and its point cost below
+        -- mirror what a customer can redeem in real life. <strong style={{ color: "#f5f6fa" }}>
+        If you don't run one</strong>, you can leave this empty; nothing else on the
+        dashboard requires it. Next Best Product recommendations will just describe a
+        purchase category (e.g. "coffee") instead of a specific redeemable reward.
       </p>
       {error && <p className="error-text">{error}</p>}
 
@@ -130,7 +136,12 @@ export default function Rewards() {
       {rewards === null ? (
         <p className="loading">Loading rewards...</p>
       ) : rewards.length === 0 ? (
-        <p className="empty">No recommendation categories yet.</p>
+        <p className="empty">
+          No reward categories yet. If you run a loyalty or rewards programme, click
+          "+ New Category" above and add each tier so recommendations map to something
+          redeemable. If you don't run one, there's nothing to set up here -- this can
+          stay empty.
+        </p>
       ) : (
         <table>
           <thead>

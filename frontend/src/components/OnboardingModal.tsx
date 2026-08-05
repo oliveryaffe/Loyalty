@@ -98,7 +98,7 @@ export default function OnboardingModal() {
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setError(
-          "This account already has real customer data, so we left it untouched -- head to Members or Insights to explore it."
+          "This account already has real customer data, so we left it untouched -- head to Customers or Insights to explore it."
         );
       } else {
         setError(isApiError(err) ? err.message : "Unable to load sample data -- please try again.");

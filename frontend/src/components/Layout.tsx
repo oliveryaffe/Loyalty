@@ -6,7 +6,7 @@ import OnboardingModal from "./OnboardingModal";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", end: true },
-  { to: "/members", label: "Members" },
+  { to: "/members", label: "Customers" },
   { to: "/rewards", label: "Rewards" },
   { to: "/fraud-alerts", label: "Fraud Alerts" },
   { to: "/insights", label: "Insights" },

@@ -27,9 +27,32 @@ export default function FraudAlerts() {
     return "low";
   }
 
+  function severityLabel(score: number): string {
+    const level = riskLevel(score);
+    return level === "high" ? "High severity" : level === "medium" ? "Medium severity" : "Low severity";
+  }
+
+  function reasonLabel(reason: string): string {
+    const parts = reason.split("+");
+    const labels = parts.map((p) =>
+      p === "abnormal_amount"
+        ? "Unusual amount"
+        : p === "abnormal_velocity"
+        ? "Rapid activity"
+        : p.replace(/_/g, " ")
+    );
+    return labels.join(" + ");
+  }
+
   return (
     <div>
       <h2>Fraud &amp; Anomaly Alerts</h2>
+      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8, maxWidth: 640 }}>
+        Two automatic checks flag a transaction: an amount that's a big outlier for that
+        customer's own history, or points earned unusually fast across several transactions
+        in a short window (bot-like or points-farming behaviour). Nothing is blocked or
+        refunded automatically -- this is a worklist for you to review and resolve.
+      </p>
       {error && <p className="error-text">{error}</p>}
 
       <div className="toolbar">
@@ -58,23 +81,24 @@ export default function FraudAlerts() {
         <table>
           <thead>
             <tr>
-              <th>Member</th>
-              <th>Reason</th>
-              <th>Details</th>
-              <th>Score</th>
+              <th>Customer</th>
+              <th>What we found</th>
+              <th>Severity</th>
               <th>Status</th>
-              <th>Created</th>
+              <th>Flagged</th>
             </tr>
           </thead>
           <tbody>
             {visible.map((a) => (
               <tr key={a.id}>
-                <td>{a.member_id.slice(0, 8)}</td>
-                <td>{a.reason}</td>
-                <td style={{ fontSize: 12, color: "#94a3b8" }}>{a.details}</td>
+                <td>{a.member_name}</td>
+                <td style={{ maxWidth: 420 }}>
+                  <div>{a.explanation}</div>
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{reasonLabel(a.reason)}</div>
+                </td>
                 <td>
-                  <span className={`badge badge-${riskLevel(a.score)}`}>
-                    {a.score.toFixed(2)}
+                  <span className={`badge badge-${riskLevel(a.score)}`} title={`Raw score: ${a.score.toFixed(2)}`}>
+                    {severityLabel(a.score)}
                   </span>
                 </td>
                 <td>{a.resolved ? "Resolved" : "Open"}</td>

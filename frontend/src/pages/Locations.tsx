@@ -47,8 +47,8 @@ export default function Locations() {
     <div>
       <h2>Locations</h2>
       <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8, maxWidth: 640 }}>
-        A roll-up across every shop on this account. Add a location below, then assign members to it from
-        their profile on the Members page -- members with no location set show up under "Unassigned".
+        A roll-up across every shop on this account. Add a location below, then assign customers to it from
+        their profile on the Customers page -- customers with no location set show up under "Unassigned".
       </p>
       {error && <p className="error-text">{error}</p>}
 
@@ -74,7 +74,7 @@ export default function Locations() {
           <thead>
             <tr>
               <th>Location</th>
-              <th>Members</th>
+              <th>Customers</th>
               <th>High Churn Risk</th>
               <th>Predicted 90-Day Value</th>
             </tr>

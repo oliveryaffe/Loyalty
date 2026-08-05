@@ -261,7 +261,9 @@ export interface FraudAlertOut {
   id: string;
   transaction_id: string;
   member_id: string;
+  member_name: string;
   reason: string;
+  explanation: string;
   score: number;
   details: string;
   resolved: boolean;

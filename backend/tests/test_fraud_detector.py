@@ -7,7 +7,7 @@ while the false-positive rate on normal transactions stays low (<5%).
 """
 from datetime import datetime, timedelta, timezone
 
-from app.ai.fraud_detector import detect_fraud, run_fraud_detection
+from app.ai.fraud_detector import detect_fraud, explain_fraud_finding, run_fraud_detection
 from app.db.models import FraudAlert, Merchant, Transaction, TransactionType
 
 
@@ -105,3 +105,37 @@ def test_fraud_detection_is_idempotent(seeded_db):
 
     # Second run shouldn't re-alert transactions already alerted.
     assert len(created_second) == 0
+
+
+def test_explain_fraud_finding_amount_is_plain_english():
+    details = "amount=\u00a345.00 is 3.2 std-devs from member's typical \u00a312.50 (n=15)"
+    sentence = explain_fraud_finding("abnormal_amount", details)
+    assert "\u00a345.00" in sentence
+    assert "\u00a312.50" in sentence
+    # No leaked jargon -- a non-technical merchant admin shouldn't need to
+    # know what a std-dev is.
+    assert "std-dev" not in sentence
+    assert "z-score" not in sentence.lower()
+
+
+def test_explain_fraud_finding_velocity_is_plain_english():
+    details = "6 earn transactions within 24h window (threshold=5)"
+    sentence = explain_fraud_finding("abnormal_velocity", details)
+    assert "6" in sentence
+    assert "24 hours" in sentence
+    assert "threshold" not in sentence.lower()
+
+
+def test_explain_fraud_finding_combined_reason_covers_both():
+    details = (
+        "amount=\u00a345.00 is 3.2 std-devs from member's typical \u00a312.50 (n=15); "
+        "6 earn transactions within 24h window (threshold=5)"
+    )
+    sentence = explain_fraud_finding("abnormal_amount+abnormal_velocity", details)
+    assert "\u00a345.00" in sentence
+    assert "24 hours" in sentence
+
+
+def test_explain_fraud_finding_falls_back_to_details_for_unknown_reason():
+    sentence = explain_fraud_finding("some_future_check", "raw detail text")
+    assert sentence == "raw detail text"

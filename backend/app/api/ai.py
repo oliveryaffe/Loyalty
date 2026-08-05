@@ -22,7 +22,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.ai.churn_model import compute_merchant_calibration, score_all_members, score_member_churn
-from app.ai.fraud_detector import run_fraud_detection
+from app.ai.fraud_detector import explain_fraud_finding, run_fraud_detection
 from app.ai.recommender import recommend_for_member
 from app.api.deps import require_active_subscription
 from app.db.base import get_db
@@ -164,7 +164,10 @@ def get_fraud_alerts(
         if created and wants_fraud_notifications(merchant):
             subject = f"{len(created)} new fraud alert(s) detected"
             body = format_member_bullet_list(
-                [f"{a.reason} (member {a.member_id[:8]}, score {a.score:.2f})" for a in created]
+                [
+                    f"{a.member.first_name} {a.member.last_name}: {explain_fraud_finding(a.reason, a.details)}"
+                    for a in created
+                ]
             )
             notify_merchant(merchant, subject, body, background_tasks)
 
@@ -175,4 +178,18 @@ def get_fraud_alerts(
         .order_by(FraudAlert.score.desc())
         .all()
     )
-    return alerts
+    return [
+        FraudAlertOut(
+            id=a.id,
+            transaction_id=a.transaction_id,
+            member_id=a.member_id,
+            member_name=f"{a.member.first_name} {a.member.last_name}".strip() or "Unknown customer",
+            reason=a.reason,
+            explanation=explain_fraud_finding(a.reason, a.details),
+            score=a.score,
+            details=a.details,
+            resolved=a.resolved,
+            created_at=a.created_at,
+        )
+        for a in alerts
+    ]

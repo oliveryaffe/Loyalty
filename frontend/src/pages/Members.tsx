@@ -148,7 +148,7 @@ export default function Members() {
 
   return (
     <div>
-      <h2>Members</h2>
+      <h2>Customers</h2>
       {error && <p className="error-text">{error}</p>}
 
       <div className="toolbar">
@@ -171,7 +171,7 @@ export default function Members() {
           <option value="low">Low risk only</option>
         </select>
         <span style={{ fontSize: 13, color: "#94a3b8" }}>
-          {members ? `${filtered.length} of ${members.length} members` : ""}
+          {members ? `${filtered.length} of ${members.length} customers` : ""}
         </span>
         <select
           className="pill-select"
@@ -198,9 +198,9 @@ export default function Members() {
       </p>
 
       {members === null ? (
-        <p className="loading">Loading members...</p>
+        <p className="loading">Loading customers...</p>
       ) : filtered.length === 0 ? (
-        <p className="empty">No members match your search.</p>
+        <p className="empty">No customers match your search.</p>
       ) : (
         <table>
           <thead>

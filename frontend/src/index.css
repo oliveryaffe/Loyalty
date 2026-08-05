@@ -425,6 +425,18 @@ button.primary:disabled {
   cursor: not-allowed;
 }
 
+/* Native <option> elements don't inherit color-scheme styling the same
+   way the <select> itself does -- without this, options render with the
+   browser's light-mode default (dark text on white) but only paint that
+   background in on hover/focus, so closed-state text looks invisible
+   against this app's dark chrome. Applies to every select in the app
+   (.pill-select toolbars, .field selects, and the plain location/business-
+   type pickers), not just Insights. */
+select option {
+  background: var(--ink);
+  color: var(--text-primary);
+}
+
 .loading, .empty {
   color: var(--text-secondary);
   font-size: 14px;

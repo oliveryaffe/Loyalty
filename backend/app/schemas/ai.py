@@ -29,7 +29,14 @@ class FraudAlertOut(BaseModel):
     id: str
     transaction_id: str
     member_id: str
+    member_name: str
     reason: str
+    # Plain-English "what happened" sentence -- see
+    # app/ai/fraud_detector.py::explain_fraud_finding. The raw `reason`
+    # code and `details` fragment (z-scores, threshold jargon) are kept
+    # below for anyone who wants the underlying numbers, but the UI leads
+    # with this instead -- reported as "jumbled and unclear" otherwise.
+    explanation: str
     score: float
     details: str
     resolved: bool

@@ -28,6 +28,60 @@ from app.db.models import FraudAlert, Member, Transaction, TransactionType
 MIN_TXNS_FOR_MEMBER_STATS = 5
 
 
+def explain_fraud_finding(reason: str, details: str) -> str:
+    """Turn a raw reason code (e.g. "abnormal_amount",
+    "abnormal_amount+abnormal_velocity") plus its already-computed
+    `details` string into one plain-English sentence a non-technical
+    merchant admin can read without decoding jargon or a z-score.
+    Competitive-brief-style "why" explanation, same idea as
+    app/ai/churn_model.py::explain_churn_risk but for fraud alerts --
+    added because the raw table (reason code + z-score + threshold
+    fragment) was reported as jumbled and unclear.
+    """
+    reasons = reason.split("+")
+    sentences: list[str] = []
+
+    if "abnormal_amount" in reasons:
+        # details looks like: "amount=£45.00 is 3.2 std-devs from
+        # member's typical £12.50 (n=15)" -- reshape into plain English
+        # rather than showing the std-dev jargon verbatim.
+        amount = _extract(details, r"amount=£([\d.,]+)")
+        typical = _extract(details, r"typical £([\d.,]+)")
+        if amount and typical:
+            sentences.append(
+                f"This transaction was £{amount}, well above what this customer "
+                f"usually spends (typically around £{typical})."
+            )
+        else:
+            sentences.append("This transaction's amount was a significant outlier for this customer.")
+
+    if "abnormal_velocity" in reasons:
+        # details looks like: "6 earn transactions within 24h window
+        # (threshold=5)"
+        count = _extract(details, r"(\d+) earn transactions")
+        window = _extract(details, r"within (\d+)h window")
+        if count and window:
+            sentences.append(
+                f"They earned points on {count} separate transactions within "
+                f"{window} hours -- much faster than normal shopping activity."
+            )
+        else:
+            sentences.append("Points were earned unusually quickly across several transactions.")
+
+    if not sentences:
+        return details or "Unusual activity was detected on this account."
+
+    return " ".join(sentences)
+
+
+def _extract(text: str, pattern: str) -> str | None:
+    import re
+
+    m = re.search(pattern, text)
+    return m.group(1) if m else None
+
+
+
 @dataclass
 class FraudFinding:
     transaction_id: str

@@ -223,8 +223,8 @@ export default function Settings() {
 
       <h2>Notification Settings</h2>
       <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8 }}>
-        Get a Slack message and/or email when a member's churn risk newly escalates to "high", or when a new
-        fraud alert is detected. Fires the next time the Members or Fraud Alerts page (or a manual re-run) is
+        Get a Slack message and/or email when a customer's churn risk newly escalates to "high", or when a new
+        fraud alert is detected. Fires the next time the Customers or Fraud Alerts page (or a manual re-run) is
         loaded -- there is no background scheduler.
       </p>
       {error && <p className="error-text">{error}</p>}
@@ -256,7 +256,7 @@ export default function Settings() {
           </div>
           <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, color: "var(--text-secondary)" }}>
             <input type="checkbox" checked={notifyChurn} onChange={(e) => setNotifyChurn(e.target.checked)} />
-            Notify on churn risk escalation (member newly enters "high" risk)
+            Notify on churn risk escalation (customer newly enters "high" risk)
           </label>
           <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, color: "var(--text-secondary)" }}>
             <input type="checkbox" checked={notifyFraud} onChange={(e) => setNotifyFraud(e.target.checked)} />
@@ -287,7 +287,7 @@ export default function Settings() {
 
       <h2 style={{ marginTop: 32 }}>Weekly Digest</h2>
       <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8 }}>
-        A short summary -- who's at risk, what your current members are worth going forward, and this
+        A short summary -- who's at risk, what your current customers are worth going forward, and this
         week's biggest opportunity -- sent to whichever Slack/email channel is configured above. Fires
         automatically once a week (no login required) once turned on above; use the button below to send
         yourself a preview any time.

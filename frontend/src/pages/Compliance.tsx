@@ -98,7 +98,7 @@ export default function Compliance() {
       <h2>Compliance</h2>
       <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8, maxWidth: 680 }}>
         Handle UK GDPR subject access (Art. 15/20) and erasure (Art. 17) requests, and see a record of
-        every request that's been actioned on this account. This covers member data only -- Ledgerly
+        every request that's been actioned on this account. This covers customer data only -- Ledgerly
         isn't a lawyer, and this isn't legal advice on your obligations.
       </p>
       {error && <p className="error-text">{error}</p>}
@@ -106,11 +106,11 @@ export default function Compliance() {
       {summary && (
         <div className="card-grid" style={{ marginBottom: 32 }}>
           <div className="card">
-            <div className="label">Members</div>
+            <div className="label">Customers</div>
             <div className="value">{summary.total_members}</div>
           </div>
           <div className="card">
-            <div className="label">Erased members</div>
+            <div className="label">Erased customers</div>
             <div className="value">{summary.erased_members}</div>
           </div>
           <div className="card">
@@ -185,7 +185,7 @@ export default function Compliance() {
           <thead>
             <tr>
               <th>Action</th>
-              <th>Member</th>
+              <th>Customer</th>
               <th>Performed by</th>
               <th>Date</th>
             </tr>
