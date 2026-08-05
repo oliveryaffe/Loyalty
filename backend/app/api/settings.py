@@ -12,7 +12,7 @@ billing/auth/webhooks/GDPR have.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.ai.churn_model import BUSINESS_TYPE_CALIBRATIONS
+from app.ai.churn_model import BUSINESS_TYPE_CALIBRATIONS, compute_merchant_calibration
 from app.api.deps import require_active_subscription, require_admin_active_subscription
 from app.db.base import get_db
 from app.db.models import Merchant
@@ -100,9 +100,14 @@ def list_business_types() -> list[BusinessTypeOption]:
 
 @router.get("/business-profile", response_model=BusinessProfileOut)
 def get_business_profile(
+    db: Session = Depends(get_db),
     merchant: Merchant = Depends(require_active_subscription),
 ) -> BusinessProfileOut:
-    return BusinessProfileOut(business_type=merchant.business_type)
+    calibration = compute_merchant_calibration(db, merchant.id)
+    return BusinessProfileOut(
+        business_type=merchant.business_type,
+        calibration_source=calibration.source,
+    )
 
 
 @router.patch("/business-profile", response_model=BusinessProfileOut)
@@ -119,4 +124,8 @@ def update_business_profile(
     merchant.business_type = payload.business_type
     db.commit()
     db.refresh(merchant)
-    return BusinessProfileOut(business_type=merchant.business_type)
+    calibration = compute_merchant_calibration(db, merchant.id)
+    return BusinessProfileOut(
+        business_type=merchant.business_type,
+        calibration_source=calibration.source,
+    )

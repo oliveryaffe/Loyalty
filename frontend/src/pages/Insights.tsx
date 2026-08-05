@@ -203,6 +203,27 @@ export default function Insights() {
         </div>
       </div>
 
+      <details style={{ marginBottom: 16, fontSize: 13, color: "var(--text-secondary)" }}>
+        <summary style={{ cursor: "pointer", color: "var(--text-primary)" }}>
+          What columns does my CSV need?
+        </summary>
+        <div style={{ marginTop: 8, lineHeight: 1.6 }}>
+          <p style={{ margin: "0 0 6px" }}>
+            <strong>Required:</strong> <code>customer_email</code>, <code>transaction_date</code>,{" "}
+            <code>amount_gbp</code>.
+          </p>
+          <p style={{ margin: 0 }}>
+            <strong>Optional:</strong> <code>customer_first_name</code> / <code>customer_last_name</code> (a
+            member is labelled "Unknown Customer" if omitted), <code>product_category</code> /{" "}
+            <code>product_name</code> (improves next-best-product quality), <code>channel</code> (pos,
+            online, or mobile), and <code>external_order_id</code>. Customers are matched to existing
+            members by email automatically. Include <code>external_order_id</code> if you want to
+            re-upload a file safely -- rows with an order ID already on file are skipped as duplicates;
+            without one, re-uploading the same rows will add them again.
+          </p>
+        </div>
+      </details>
+
       {uploadError && <p className="error-text">Upload failed: {uploadError}</p>}
       {uploadResult && (
         <div className="upload-banner">

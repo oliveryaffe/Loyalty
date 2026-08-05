@@ -33,13 +33,16 @@ export default function Settings() {
 
   const [businessTypes, setBusinessTypes] = useState<BusinessTypeOption[] | null>(null);
   const [businessType, setBusinessType] = useState<string | null>(null);
+  const [calibrationSource, setCalibrationSource] = useState<string | null>(null);
   const [savingBusinessType, setSavingBusinessType] = useState(false);
   const [businessTypeError, setBusinessTypeError] = useState<string | null>(null);
+  const [businessTypeSaved, setBusinessTypeSaved] = useState(false);
 
   function loadBusinessProfile() {
     Promise.all([getBusinessProfile(), listBusinessTypes()])
       .then(([profile, options]) => {
         setBusinessType(profile.business_type);
+        setCalibrationSource(profile.calibration_source);
         setBusinessTypes(options);
       })
       .catch((err) =>
@@ -49,15 +52,30 @@ export default function Settings() {
 
   async function handleBusinessTypeChange(value: string) {
     setBusinessTypeError(null);
+    setBusinessTypeSaved(false);
     setSavingBusinessType(true);
     try {
       const result = await updateBusinessProfile(value);
       setBusinessType(result.business_type);
+      setCalibrationSource(result.calibration_source);
+      setBusinessTypeSaved(true);
     } catch (err) {
       setBusinessTypeError(isApiError(err) ? err.message : "Unable to save business type.");
     } finally {
       setSavingBusinessType(false);
     }
+  }
+
+  function calibrationStatusText(): string | null {
+    if (!calibrationSource) return null;
+    if (calibrationSource === "calibrated") {
+      return "Using your own transaction history to calibrate churn risk and future-value scores.";
+    }
+    if (calibrationSource === "default_vertical") {
+      const label = businessTypes?.find((opt) => opt.value === businessType)?.label ?? "your business type";
+      return `Using starting defaults for ${label} until we've seen enough of your own repeat visits to calibrate automatically.`;
+    }
+    return "Using generic starting defaults until we've seen enough of your own repeat visits to calibrate automatically.";
   }
 
   function load() {
@@ -125,6 +143,16 @@ export default function Settings() {
             ))}
           </select>
         </div>
+        {calibrationStatusText() && (
+          <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 12, marginBottom: 0 }}>
+            {calibrationStatusText()}
+          </p>
+        )}
+        {businessTypeSaved && !businessTypeError && (
+          <p style={{ color: "var(--mint)", fontSize: 13, marginTop: 8, marginBottom: 0 }}>
+            Business type saved.
+          </p>
+        )}
       </div>
 
       <h2>Notification Settings</h2>

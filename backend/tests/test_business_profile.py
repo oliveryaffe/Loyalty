@@ -45,6 +45,8 @@ def test_business_profile_defaults_to_null_business_type(client, admin_headers):
     resp = client.get("/api/v1/settings/business-profile", headers=admin_headers)
     assert resp.status_code == 200
     assert resp.json()["business_type"] is None
+    # No business_type and no history yet -> generic default calibration.
+    assert resp.json()["calibration_source"] == "default"
 
 
 def test_business_profile_update_persists(client, admin_headers):
@@ -53,9 +55,13 @@ def test_business_profile_update_persists(client, admin_headers):
     )
     assert resp.status_code == 200
     assert resp.json()["business_type"] == "barber_salon"
+    # Thin history + a real business_type -> vertical-default calibration,
+    # surfaced so the frontend can show which mode is active.
+    assert resp.json()["calibration_source"] == "default_vertical"
 
     refetched = client.get("/api/v1/settings/business-profile", headers=admin_headers)
     assert refetched.json()["business_type"] == "barber_salon"
+    assert refetched.json()["calibration_source"] == "default_vertical"
 
 
 def test_business_profile_rejects_unknown_business_type(client, admin_headers):

@@ -43,9 +43,19 @@ class BusinessProfileOut(BaseModel):
     yet -- the frontend shows a one-question business-type picker on the
     dashboard whenever this is null, and stops once it's set (including to
     "other", a valid explicit answer). See app.ai.churn_model for how this
-    feeds churn/future-value's calibration fallback."""
+    feeds churn/future-value's calibration fallback.
+
+    `calibration_source` mirrors MerchantCalibration.source from
+    app.ai.churn_model -- "calibrated" once the merchant has enough of its
+    own repeat-visit history (>= MIN_MEMBERS_WITH_REPEAT_VISITS), else
+    "default_vertical" (using business_type's starting defaults) or
+    "default" (generic starting defaults, no business_type set). Exposed
+    so the Settings page can show which mode is actually active instead of
+    leaving the business-type picker looking like a no-op once real
+    calibration has taken over."""
 
     business_type: str | None
+    calibration_source: str
 
 
 class BusinessProfileUpdate(BaseModel):

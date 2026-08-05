@@ -460,6 +460,7 @@ export interface BusinessTypeOption {
 
 export interface BusinessProfileOut {
   business_type: string | null;
+  calibration_source: string;
 }
 
 export function listBusinessTypes(): Promise<BusinessTypeOption[]> {
