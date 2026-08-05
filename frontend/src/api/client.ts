@@ -581,6 +581,23 @@ export function getSampleDataStatus(): Promise<SampleDataStatusOut> {
 }
 
 // ---------------------------------------------------------------------
+// Cross-merchant vertical benchmarking
+// ---------------------------------------------------------------------
+
+export interface BenchmarkOut {
+  available: boolean;
+  business_type: string | null;
+  peer_count: number;
+  your_repeat_visit_rate: number | null;
+  top_percent: number | null;
+  message: string;
+}
+
+export function getBenchmark(): Promise<BenchmarkOut> {
+  return request<BenchmarkOut>("/benchmark/repeat-visit-rate");
+}
+
+// ---------------------------------------------------------------------
 // GDPR / Compliance tab
 // ---------------------------------------------------------------------
 

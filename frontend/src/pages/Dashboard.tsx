@@ -2,10 +2,12 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
+  BenchmarkOut,
   BusinessProfileOut,
   BusinessTypeOption,
   FraudAlertOut,
   FutureValueOut,
+  getBenchmark,
   getBusinessProfile,
   getFraudAlerts,
   getFutureValue,
@@ -41,6 +43,7 @@ export default function Dashboard() {
   const [businessProfile, setBusinessProfile] = useState<BusinessProfileOut | null>(null);
   const [businessTypes, setBusinessTypes] = useState<BusinessTypeOption[] | null>(null);
   const [isSampleData, setIsSampleData] = useState(false);
+  const [benchmark, setBenchmark] = useState<BenchmarkOut | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,8 +56,9 @@ export default function Dashboard() {
       getBusinessProfile(),
       listBusinessTypes(),
       getSampleDataStatus(),
+      getBenchmark(),
     ])
-      .then(([m, t, a, fv, profile, types, sampleStatus]) => {
+      .then(([m, t, a, fv, profile, types, sampleStatus, benchmarkResult]) => {
         if (cancelled) return;
         setMembers(m);
         setTransactions(t);
@@ -63,6 +67,7 @@ export default function Dashboard() {
         setBusinessProfile(profile);
         setBusinessTypes(types);
         setIsSampleData(sampleStatus.is_sample_data);
+        setBenchmark(benchmarkResult);
       })
       .catch((err) => !cancelled && setError(String(err)));
     return () => {
@@ -111,6 +116,20 @@ export default function Dashboard() {
         <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8, marginBottom: 16 }}>
           {statusText} <Link to="/settings">Change business type &rarr;</Link>
         </p>
+      )}
+      {benchmark?.available && !loading && (
+        <div
+          style={{
+            background: "rgba(47,224,193,0.12)",
+            border: "1px solid rgba(47,224,193,0.35)",
+            borderRadius: 8,
+            padding: "10px 14px",
+            marginBottom: 16,
+            fontSize: 13,
+          }}
+        >
+          {benchmark.message}
+        </div>
       )}
       {loading && !error ? (
         <p className="loading">Loading overview...</p>

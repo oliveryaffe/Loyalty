@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import (
     ai,
     auth,
+    benchmark,
     billing,
     digest,
     experiments,
@@ -69,3 +70,4 @@ app.include_router(winback.router)
 app.include_router(experiments.router)
 app.include_router(gdpr.router)
 app.include_router(digest.router)
+app.include_router(benchmark.router)
