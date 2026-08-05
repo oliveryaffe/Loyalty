@@ -116,6 +116,7 @@ export interface MemberWithChurn {
   joined_at: string;
   last_activity_at: string;
   erased_at: string | null;
+  location_id: string | null;
   churn_risk_score: number | null;
   churn_risk_band: string | null;
   churn_risk_explanation: string | null;
@@ -597,6 +598,46 @@ export interface BenchmarkOut {
 
 export function getBenchmark(): Promise<BenchmarkOut> {
   return request<BenchmarkOut>("/benchmark/repeat-visit-rate");
+}
+
+// ---------------------------------------------------------------------
+// Multi-location roll-up
+// ---------------------------------------------------------------------
+
+export interface LocationOut {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface LocationRollupOut {
+  location_id: string | null;
+  name: string;
+  member_count: number;
+  high_risk_count: number;
+  predicted_value_90d: number;
+}
+
+export function listLocations(): Promise<LocationOut[]> {
+  return request<LocationOut[]>("/locations");
+}
+
+export function createLocation(name: string): Promise<LocationOut> {
+  return request<LocationOut>("/locations", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function getLocationRollup(): Promise<LocationRollupOut[]> {
+  return request<LocationRollupOut[]>("/locations/rollup");
+}
+
+export function assignMemberLocation(memberId: string, locationId: string | null): Promise<LocationOut | null> {
+  return request<LocationOut | null>(`/members/${memberId}/location`, {
+    method: "PATCH",
+    body: JSON.stringify({ location_id: locationId }),
+  });
 }
 
 // ---------------------------------------------------------------------

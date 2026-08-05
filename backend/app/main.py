@@ -17,6 +17,7 @@ from app.api import (
     experiments,
     gdpr,
     insights,
+    locations,
     members,
     rewards,
     settings as settings_api,
@@ -71,3 +72,4 @@ app.include_router(experiments.router)
 app.include_router(gdpr.router)
 app.include_router(digest.router)
 app.include_router(benchmark.router)
+app.include_router(locations.router)

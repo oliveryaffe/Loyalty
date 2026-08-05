@@ -2,10 +2,13 @@ import React, { useEffect, useMemo, useState } from "react";
 
 import { isApiError } from "../AuthContext";
 import {
+  assignMemberLocation,
   AudienceExportFormat,
   downloadAudienceExport,
   getRecommendations,
+  listLocations,
   listMembers,
+  LocationOut,
   MemberWithChurn,
   RecommendationOut,
 } from "../api/client";
@@ -38,12 +41,32 @@ export default function Members() {
   const [exportFormat, setExportFormat] = useState<AudienceExportFormat>("generic");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [locations, setLocations] = useState<LocationOut[] | null>(null);
+  const [savingLocation, setSavingLocation] = useState(false);
 
   useEffect(() => {
     listMembers(true)
       .then(setMembers)
       .catch((err) => setError(String(err)));
+    listLocations()
+      .then(setLocations)
+      .catch(() => setLocations([])); // non-critical -- just disables the picker
   }, []);
+
+  async function handleLocationChange(locationId: string) {
+    if (!selectedMember) return;
+    setSavingLocation(true);
+    try {
+      await assignMemberLocation(selectedMember.id, locationId || null);
+      const updatedMember = { ...selectedMember, location_id: locationId || null };
+      setSelectedMember(updatedMember);
+      setMembers((prev) => prev?.map((m) => (m.id === updatedMember.id ? updatedMember : m)) ?? prev);
+    } catch (err) {
+      setError(isApiError(err) ? err.message : "Unable to update location.");
+    } finally {
+      setSavingLocation(false);
+    }
+  }
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
@@ -254,6 +277,23 @@ export default function Members() {
               <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: -4 }}>
                 {selectedMember.churn_risk_explanation}
               </p>
+            )}
+            {locations && locations.length > 0 && (
+              <div className="field" style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 12 }}>Location</label>
+                <select
+                  value={selectedMember.location_id ?? ""}
+                  disabled={savingLocation}
+                  onChange={(e) => handleLocationChange(e.target.value)}
+                >
+                  <option value="">Unassigned</option>
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
             <h3 style={{ marginBottom: 8 }}>Recommended Rewards</h3>
             {recLoading && <p className="loading">Scoring recommendations...</p>}

@@ -30,6 +30,9 @@ class MemberOut(BaseModel):
     joined_at: datetime
     last_activity_at: datetime
     erased_at: datetime | None = None
+    # Multi-location roll-up (competitive-brief backlog item #6) --
+    # None means "unassigned". See app/db/models.py::Location.
+    location_id: str | None = None
 
     class Config:
         from_attributes = True

@@ -220,6 +220,13 @@ class Member(Base):
     # with is_sample not True -- i.e. any real data at all.
     is_sample: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
 
+    # Multi-location roll-up (competitive-brief backlog item #6): a
+    # member's "home" location. Nullable/additive -- every existing member
+    # row reads back as NULL ("unassigned"), which the roll-up treats as
+    # its own bucket rather than silently dropping members that predate
+    # this feature or were never assigned. See app/services/locations.py.
+    location_id: Mapped[str | None] = mapped_column(ForeignKey("locations.id"), nullable=True, index=True)
+
     merchant: Mapped["Merchant"] = relationship(back_populates="members")
     transactions: Mapped[list["Transaction"]] = relationship(
         back_populates="member", cascade="all, delete-orphan"
@@ -227,6 +234,23 @@ class Member(Base):
     redemptions: Mapped[list["Redemption"]] = relationship(
         back_populates="member", cascade="all, delete-orphan"
     )
+
+
+class Location(Base):
+    """A single physical/operating location within a merchant account
+    (competitive-brief backlog item #6: "a lightweight view across your N
+    shops"). Opt-in -- a merchant with one shop never needs to create one,
+    and members with no location_id are simply "unassigned" rather than
+    invalid. Deliberately minimal (just a name) for v1; not itself a
+    tenant boundary the way Merchant is -- all locations under one
+    merchant still share the same team/billing/subscription."""
+
+    __tablename__ = "locations"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    merchant_id: Mapped[str] = mapped_column(ForeignKey("merchants.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class RewardCatalogItem(Base):

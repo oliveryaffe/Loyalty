@@ -6,6 +6,7 @@ import Layout from "./components/Layout";
 import { SubscriptionGate } from "./components/SubscriptionGate";
 import Billing from "./pages/Billing";
 import Compliance from "./pages/Compliance";
+import Locations from "./pages/Locations";
 import Dashboard from "./pages/Dashboard";
 import FraudAlerts from "./pages/FraudAlerts";
 import Insights from "./pages/Insights";
@@ -52,6 +53,7 @@ function AppRoutes() {
         <Route path="settings" element={<Settings />} />
         <Route path="billing" element={<Billing />} />
         <Route path="compliance" element={<Compliance />} />
+        <Route path="locations" element={<Locations />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

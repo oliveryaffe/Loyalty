@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { to: "/settings", label: "Settings" },
   { to: "/billing", label: "Billing" },
   { to: "/compliance", label: "Compliance" },
+  { to: "/locations", label: "Locations" },
 ];
 
 // Base URL of the marketing site, which hosts the single canonical copy of
