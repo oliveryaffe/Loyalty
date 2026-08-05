@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 
+import { isApiError } from "../AuthContext";
 import {
+  AudienceExportFormat,
+  downloadAudienceExport,
   getRecommendations,
   listMembers,
   MemberWithChurn,
@@ -32,6 +35,9 @@ export default function Members() {
     null
   );
   const [recLoading, setRecLoading] = useState(false);
+  const [exportFormat, setExportFormat] = useState<AudienceExportFormat>("generic");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     listMembers(true)
@@ -95,6 +101,18 @@ export default function Members() {
     return sorted;
   }, [members, search, riskFilter, sortKey, sortDir]);
 
+  async function handleExport() {
+    setExportError(null);
+    setExporting(true);
+    try {
+      await downloadAudienceExport(riskFilter === "all" ? null : riskFilter, exportFormat);
+    } catch (err) {
+      setExportError(isApiError(err) ? err.message : "Unable to export audience.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function openMember(m: MemberWithChurn) {
     setSelectedMember(m);
     setRecommendations(null);
@@ -132,7 +150,29 @@ export default function Members() {
         <span style={{ fontSize: 13, color: "#94a3b8" }}>
           {members ? `${filtered.length} of ${members.length} members` : ""}
         </span>
+        <select
+          className="pill-select"
+          value={exportFormat}
+          onChange={(e) => setExportFormat(e.target.value as AudienceExportFormat)}
+          aria-label="Export format"
+        >
+          <option value="generic">Generic CSV</option>
+          <option value="mailchimp">Mailchimp</option>
+          <option value="klaviyo">Klaviyo</option>
+        </select>
+        <button type="button" className="secondary" onClick={handleExport} disabled={exporting}>
+          {exporting
+            ? "Exporting..."
+            : riskFilter === "all"
+            ? "Export audience"
+            : `Export ${riskFilter}-risk audience`}
+        </button>
       </div>
+      {exportError && <p className="error-text">{exportError}</p>}
+      <p className="hint" style={{ marginTop: -8 }}>
+        Exports the list currently filtered above (by risk level) as a CSV ready to import into Mailchimp
+        or Klaviyo -- act on the insight wherever you already message customers.
+      </p>
 
       {members === null ? (
         <p className="loading">Loading members...</p>

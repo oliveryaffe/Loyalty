@@ -754,3 +754,34 @@ export async function downloadInsightsReport(horizonDays = 90): Promise<void> {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+// ---------------------------------------------------------------------
+// Actionable audience exports (Mailchimp/Klaviyo-compatible CSV)
+// ---------------------------------------------------------------------
+
+export type AudienceExportFormat = "generic" | "mailchimp" | "klaviyo";
+export type AudienceExportRisk = "high" | "medium" | "low" | null;
+
+export async function downloadAudienceExport(
+  risk: AudienceExportRisk,
+  format: AudienceExportFormat
+): Promise<void> {
+  const token = getToken();
+  const params = new URLSearchParams({ format });
+  if (risk) params.set("risk", risk);
+  const res = await fetch(`${API_BASE_URL}/members/export.csv?${params.toString()}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, res.statusText);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ledgerly-audience-${risk ?? "all"}-${format}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

@@ -1,8 +1,11 @@
 """Member CRUD + list (scoped to the authenticated merchant)."""
+import csv
+import io
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.ai.churn_model import compute_merchant_calibration, score_member_churn
@@ -20,6 +23,13 @@ from app.db.models import (
 )
 from app.schemas.gdpr import MemberErasureResult, MemberExportOut
 from app.schemas.member import MemberCreate, MemberOut, MemberWithChurn
+from app.services.audience_export import (
+    AUDIENCE_EXPORT_FORMATS,
+    DEFAULT_EXPORT_FORMAT,
+    VALID_RISK_BANDS,
+    build_audience_export_rows,
+)
+from app.services.usage import record_usage_event
 
 router = APIRouter(prefix="/api/v1/members", tags=["members"])
 
@@ -46,6 +56,54 @@ def list_members(
             out.churn_risk_band = churn.risk_band
         results.append(out)
     return results
+
+
+@router.get("/export.csv")
+def export_audience(
+    risk: str | None = Query(None),
+    format: str = Query(DEFAULT_EXPORT_FORMAT),
+    db: Session = Depends(get_db),
+    merchant: Merchant = Depends(require_active_subscription),
+) -> StreamingResponse:
+    """Actionable audience export (competitive-brief backlog item #4) --
+    see app/services/audience_export.py for the full rationale. Declared
+    before GET /{member_id} below so "export.csv" is matched as this
+    literal route rather than captured as a member_id path parameter.
+
+    `risk` optionally filters to one band ("high"/"medium"/"low"); omitted
+    means all members. `format` picks the header row to match Mailchimp,
+    Klaviyo, or a plain generic CSV -- same underlying rows either way.
+    """
+    if risk is not None and risk not in VALID_RISK_BANDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"risk must be one of {VALID_RISK_BANDS}"
+        )
+    if format not in AUDIENCE_EXPORT_FORMATS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"format must be one of {sorted(AUDIENCE_EXPORT_FORMATS)}",
+        )
+
+    rows = build_audience_export_rows(db, merchant.id, risk_band=risk)
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(AUDIENCE_EXPORT_FORMATS[format])
+    writer.writerows(rows)
+    buffer.seek(0)
+
+    # Billable insight run (app/services/usage.py) -- same reasoning as
+    # GET /insights/report.csv: a real, merchant-initiated export of
+    # generated output, not a passive dashboard read.
+    record_usage_event(db, merchant, "audience_export")
+    db.commit()
+
+    filename = f"ledgerly-audience-{risk or 'all'}-{format}.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{member_id}", response_model=MemberWithChurn)
