@@ -124,7 +124,7 @@ export default function OnboardingModal() {
         zIndex: 20,
       }}
     >
-      <div className="login-card" style={{ width: 480 }}>
+      <div className="login-card modal-card" style={{ width: 480 }}>
         {step === "business_type" ? (
           <>
             <h1>What kind of business is this?</h1>

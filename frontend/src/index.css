@@ -311,6 +311,18 @@ button.secondary:disabled {
   color: var(--text-primary);
 }
 
+/* .login-card's --card-bg gradient is intentionally translucent (6% /
+   2% white over black) -- fine for the full-page login screen, where the
+   only thing behind it is the ink radial-gradient background. Reused as
+   a dialog panel (OnboardingModal, the Members detail modal, the
+   Compliance erase-confirm modal), that same translucency let real page
+   content behind the backdrop show through and become readable/jumbled
+   -- reported as "background text behind the selections menu". This
+   opaque variant is for exactly that dialog-over-live-content case. */
+.modal-card {
+  background: linear-gradient(180deg, #161b2c 0%, #0e111a 100%);
+}
+
 .login-card h1 {
   font-size: 20px;
   margin-bottom: 4px;

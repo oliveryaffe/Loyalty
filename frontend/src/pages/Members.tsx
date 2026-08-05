@@ -256,7 +256,7 @@ export default function Members() {
           onClick={() => setSelectedMember(null)}
         >
           <div
-            className="login-card"
+            className="login-card modal-card"
             style={{ width: 420 }}
             onClick={(e) => e.stopPropagation()}
           >

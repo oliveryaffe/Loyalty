@@ -217,7 +217,7 @@ export default function Compliance() {
           }}
           onClick={() => setConfirmingEraseId(null)}
         >
-          <div className="login-card" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
+          <div className="login-card modal-card" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
             <h1>Erase this member?</h1>
             <p className="subtitle">
               This overwrites their name and email with anonymised placeholders. Their transaction history
