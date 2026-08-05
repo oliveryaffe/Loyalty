@@ -508,6 +508,32 @@ export function updateBusinessProfile(businessType: string): Promise<BusinessPro
   });
 }
 
+// Per-vertical sample data (app/services/sample_data.py) -- realistic
+// starter members/transactions/rewards tailored to a business type, only
+// ever generated for an account with zero real data (server-enforced,
+// 409s otherwise).
+export interface SampleDataOut {
+  business_type: string;
+  members_created: number;
+  transactions_created: number;
+  rewards_created: number;
+}
+
+export interface SampleDataStatusOut {
+  is_sample_data: boolean;
+}
+
+export function loadSampleData(businessType: string): Promise<SampleDataOut> {
+  return request<SampleDataOut>("/insights/sample-data", {
+    method: "POST",
+    body: JSON.stringify({ business_type: businessType }),
+  });
+}
+
+export function getSampleDataStatus(): Promise<SampleDataStatusOut> {
+  return request<SampleDataStatusOut>("/insights/sample-data/status");
+}
+
 // Clears business_type back to null so the onboarding picker (see
 // components/OnboardingModal.tsx) replays on next dashboard load --
 // lets you re-trigger the getting-started flow on an existing/demo

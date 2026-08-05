@@ -2,12 +2,19 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
+  ApiError,
   BusinessTypeOption,
   getBusinessProfile,
   listBusinessTypes,
+  loadSampleData,
   updateBusinessProfile,
 } from "../api/client";
 import { isApiError } from "../AuthContext";
+
+// Sample data only exists for a subset of business types (see
+// backend/app/services/sample_data.py::SAMPLE_DATA_BUSINESS_TYPES) --
+// "Other" has no vertical profile to generate from.
+const SAMPLE_DATA_BUSINESS_TYPES = new Set(["coffee_shop", "restaurant", "barber_salon", "retail"]);
 
 type Step = "business_type" | "get_started";
 
@@ -33,9 +40,12 @@ export default function OnboardingModal() {
   const [step, setStep] = useState<Step>("business_type");
   const [visible, setVisible] = useState(false);
   const [options, setOptions] = useState<BusinessTypeOption[] | null>(null);
+  const [chosenValue, setChosenValue] = useState<string | null>(null);
   const [chosenLabel, setChosenLabel] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadingSample, setLoadingSample] = useState(false);
+  const [sampleLoaded, setSampleLoaded] = useState(false);
 
   useEffect(() => {
     Promise.all([getBusinessProfile(), listBusinessTypes()])
@@ -58,6 +68,7 @@ export default function OnboardingModal() {
     setSaving(value);
     try {
       await updateBusinessProfile(value);
+      setChosenValue(value);
       setChosenLabel(label);
       setStep("get_started");
     } catch (err) {
@@ -71,6 +82,29 @@ export default function OnboardingModal() {
     setVisible(false);
     if (goToInsights) {
       navigate("/insights");
+    }
+  }
+
+  async function handleLoadSampleData() {
+    if (!chosenValue) return;
+    setError(null);
+    setLoadingSample(true);
+    try {
+      await loadSampleData(chosenValue);
+      setSampleLoaded(true);
+      // Brief pause so "Sample data loaded" is actually readable before
+      // the modal closes, rather than flashing and vanishing.
+      setTimeout(() => setVisible(false), 900);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setError(
+          "This account already has real customer data, so we left it untouched -- head to Members or Insights to explore it."
+        );
+      } else {
+        setError(isApiError(err) ? err.message : "Unable to load sample data -- please try again.");
+      }
+    } finally {
+      setLoadingSample(false);
     }
   }
 
@@ -119,16 +153,41 @@ export default function OnboardingModal() {
           <>
             <h1>You're set up{chosenLabel ? ` as a ${chosenLabel.toLowerCase()}` : ""}.</h1>
             <p className="subtitle">
-              Next, bring in your own transaction history so churn risk and future-value scoring can
-              calibrate to your real customers instead of starting defaults. You can always do this later
-              from the Insights page.
+              {chosenValue && SAMPLE_DATA_BUSINESS_TYPES.has(chosenValue)
+                ? `See what Ledgerly looks like with realistic ${chosenLabel?.toLowerCase()} data -- different customers, visit patterns, and rewards to match -- or bring in your own transaction history straight away.`
+                : "Bring in your own transaction history so churn risk and future-value scoring can calibrate to your real customers. You can always do this later from the Insights page."}
             </p>
             {error && <p className="error-text">{error}</p>}
+            {sampleLoaded && !error && (
+              <p style={{ color: "var(--mint)", fontSize: 13, marginTop: -4 }}>
+                Sample data loaded -- opening your dashboard...
+              </p>
+            )}
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
-              <button type="button" className="primary" onClick={() => finish(true)}>
-                Upload my customer data now
+              {chosenValue && SAMPLE_DATA_BUSINESS_TYPES.has(chosenValue) && (
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={handleLoadSampleData}
+                  disabled={loadingSample || sampleLoaded}
+                >
+                  {loadingSample ? "Generating sample data..." : `Load sample ${chosenLabel?.toLowerCase()} data`}
+                </button>
+              )}
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => finish(true)}
+                disabled={loadingSample}
+              >
+                Upload my own customer data now
               </button>
-              <button type="button" className="secondary" onClick={() => finish(false)}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => finish(false)}
+                disabled={loadingSample}
+              >
                 I'll do this later -- let me explore first
               </button>
             </div>

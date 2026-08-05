@@ -9,6 +9,7 @@ import {
   getBusinessProfile,
   getFraudAlerts,
   getFutureValue,
+  getSampleDataStatus,
   listBusinessTypes,
   listMembers,
   listTransactions,
@@ -39,6 +40,7 @@ export default function Dashboard() {
   const [futureValue, setFutureValue] = useState<FutureValueOut[] | null>(null);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfileOut | null>(null);
   const [businessTypes, setBusinessTypes] = useState<BusinessTypeOption[] | null>(null);
+  const [isSampleData, setIsSampleData] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -50,8 +52,9 @@ export default function Dashboard() {
       getFutureValue(90),
       getBusinessProfile(),
       listBusinessTypes(),
+      getSampleDataStatus(),
     ])
-      .then(([m, t, a, fv, profile, types]) => {
+      .then(([m, t, a, fv, profile, types, sampleStatus]) => {
         if (cancelled) return;
         setMembers(m);
         setTransactions(t);
@@ -59,6 +62,7 @@ export default function Dashboard() {
         setFutureValue(fv);
         setBusinessProfile(profile);
         setBusinessTypes(types);
+        setIsSampleData(sampleStatus.is_sample_data);
       })
       .catch((err) => !cancelled && setError(String(err)));
     return () => {
@@ -87,6 +91,22 @@ export default function Dashboard() {
     <div>
       <h2>Dashboard</h2>
       {error && <p className="error-text">{error}</p>}
+      {isSampleData && !loading && (
+        <div
+          style={{
+            background: "rgba(124,92,255,0.12)",
+            border: "1px solid rgba(124,92,255,0.35)",
+            borderRadius: 8,
+            padding: "10px 14px",
+            marginBottom: 12,
+            fontSize: 13,
+          }}
+        >
+          You're viewing sample data so you can see how Ledgerly looks for your business type.{" "}
+          <Link to="/insights">Upload your own data</Link> whenever you're ready -- it'll replace the
+          sample data automatically.
+        </div>
+      )}
       {statusText && !loading && (
         <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8, marginBottom: 16 }}>
           {statusText} <Link to="/settings">Change business type &rarr;</Link>

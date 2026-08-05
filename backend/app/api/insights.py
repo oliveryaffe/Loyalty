@@ -20,11 +20,25 @@ from app.ai.future_value import (
     train_future_value_model,
 )
 from app.ai.next_best_product import build_affinity_matrix, recommend_next_best
-from app.api.deps import require_active_subscription
+from app.api.deps import require_active_subscription, require_admin_active_subscription
 from app.db.base import get_db
 from app.db.models import Member, Merchant
-from app.schemas.insights import FutureValueOut, InsightsUploadResult, NextBestOut
+from app.schemas.insights import (
+    FutureValueOut,
+    InsightsUploadResult,
+    NextBestOut,
+    SampleDataOut,
+    SampleDataRequest,
+    SampleDataStatusOut,
+)
 from app.services.csv_ingest import CsvUploadError, parse_and_ingest_csv
+from app.services.sample_data import (
+    SAMPLE_DATA_BUSINESS_TYPES,
+    clear_sample_data,
+    generate_sample_dataset,
+    has_real_data,
+    is_viewing_sample_data,
+)
 from app.services.usage import record_usage_event
 
 router = APIRouter(prefix="/api/v1/insights", tags=["insights"])
@@ -75,6 +89,16 @@ async def upload_insights_csv(
         raise HTTPException(status_code=422, detail="File must be a .csv / text/csv file.")
 
     raw_bytes = await file.read()
+
+    # Real data always wins over sample data -- if this account is
+    # currently showing sample data from onboarding (see
+    # app/services/sample_data.py), clear it out before ingesting the
+    # real upload so the two never end up mixed together in the same
+    # merchant's analytics. Only ever touches is_sample=True rows; a
+    # no-op if there's nothing to clear.
+    if is_viewing_sample_data(db, merchant.id):
+        clear_sample_data(db, merchant)
+
     try:
         result = parse_and_ingest_csv(db, merchant, raw_bytes, mint_points=mint_points)
     except CsvUploadError as exc:
@@ -90,6 +114,59 @@ async def upload_insights_csv(
     record_usage_event(db, merchant, "csv_upload")
     db.commit()
     return result
+
+
+@router.post("/sample-data", response_model=SampleDataOut)
+def load_sample_data(
+    payload: SampleDataRequest,
+    db: Session = Depends(get_db),
+    merchant: Merchant = Depends(require_admin_active_subscription),
+) -> SampleDataOut:
+    """Generates a vertical-specific sample dataset (app/services/
+    sample_data.py) so a merchant exploring Ledgerly during onboarding sees
+    realistic, business-type-appropriate data instead of an empty
+    dashboard -- or the coffee-shop-flavored hosted demo data regardless
+    of which business type they picked.
+
+    Hard-blocked (409) whenever the merchant has any real data already --
+    this must never silently replace a merchant's actual uploaded/API-
+    created transaction history. Calling it again (e.g. after picking a
+    different business type) is fine and expected: it clears out the
+    previous sample dataset first and generates a fresh one.
+
+    Not counted as a billable insight run (app/services/usage.py) --
+    generating sample data isn't the merchant processing their own data,
+    it's Ledgerly showing them what processing data looks like."""
+    if payload.business_type not in SAMPLE_DATA_BUSINESS_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"business_type must be one of {sorted(SAMPLE_DATA_BUSINESS_TYPES)}",
+        )
+    if has_real_data(db, merchant.id):
+        raise HTTPException(
+            status_code=409,
+            detail="This account already has real customer data -- sample data can't be loaded over it.",
+        )
+
+    result = generate_sample_dataset(db, merchant, payload.business_type)
+    db.commit()
+    return SampleDataOut(
+        business_type=result.business_type,
+        members_created=result.members_created,
+        transactions_created=result.transactions_created,
+        rewards_created=result.rewards_created,
+    )
+
+
+@router.get("/sample-data/status", response_model=SampleDataStatusOut)
+def get_sample_data_status(
+    db: Session = Depends(get_db),
+    merchant: Merchant = Depends(require_active_subscription),
+) -> SampleDataStatusOut:
+    """Powers the "you're viewing sample data" banner (Dashboard, Members,
+    Insights). Read-only, any team role -- same gating as the rest of the
+    dashboard's read endpoints."""
+    return SampleDataStatusOut(is_sample_data=is_viewing_sample_data(db, merchant.id))
 
 
 @router.get("/future-value", response_model=list[FutureValueOut])

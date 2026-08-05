@@ -180,7 +180,9 @@ export default function Settings() {
         </button>
         <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
           Clears the business type above and re-shows the getting-started flow next time the dashboard
-          loads -- handy for replaying it on this account instead of only ever seeing it once.
+          loads -- handy for replaying it on this account instead of only ever seeing it once. If this
+          account only has sample data (or none at all), the flow will also offer to load a fresh sample
+          dataset for whichever business type you pick next. Real uploaded data is never touched.
         </p>
       </div>
 

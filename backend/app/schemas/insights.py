@@ -21,6 +21,29 @@ class InsightsUploadResult(BaseModel):
     errors: list[InsightsUploadRowError]
 
 
+class SampleDataRequest(BaseModel):
+    business_type: str
+
+
+class SampleDataOut(BaseModel):
+    """Result of app/services/sample_data.py::generate_sample_dataset --
+    a vertical-specific starter dataset (members, transactions, reward
+    catalog), only ever generated for an account with zero real data."""
+
+    business_type: str
+    members_created: int
+    transactions_created: int
+    rewards_created: int
+
+
+class SampleDataStatusOut(BaseModel):
+    """Powers the "you're viewing sample data" banner -- True whenever
+    every member on the account right now is sample data (see
+    app/services/sample_data.py::is_viewing_sample_data)."""
+
+    is_sample_data: bool
+
+
 class FutureValueOut(BaseModel):
     member_id: str
     first_name: str
