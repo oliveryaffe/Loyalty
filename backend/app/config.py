@@ -70,6 +70,16 @@ class Settings(BaseSettings):
     billing_success_url: str = "http://localhost:5173/billing/success"
     billing_cancel_url: str = "http://localhost:5173/billing/cancel"
 
+    # One-off, secret-gated maintenance endpoint (temporary -- added to
+    # allow re-running scripts/seed_data.py::seed(reset=True) against the
+    # production Postgres DB from outside the sandbox's restricted network
+    # egress, which blocks direct DB connections and POST requests to the
+    # deployed backend. Unset by default, so the endpoint 404s unless this
+    # env var is explicitly configured on Railway. Intended to be removed
+    # (env var unset, endpoint deleted) immediately after the one-off demo
+    # data repair it was added for.
+    admin_reseed_secret: str | None = None
+
     # Notifications (PLAN_BATCH3.md §3). SMTP fields are all optional/
     # `None`-defaulted, same "owner-supplied external dependency" pattern as
     # Stripe above -- the app boots and runs fine with zero SMTP config
