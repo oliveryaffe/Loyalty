@@ -26,8 +26,10 @@ from app.db.models import BillingEvent, TeamMember
 from app.schemas.billing import (
     CheckoutSessionOut,
     CheckoutSessionRequest,
+    PlanOut,
     PortalSessionOut,
     SubscriptionOut,
+    UsageOut,
 )
 from app.services.billing import (
     create_checkout_session,
@@ -37,6 +39,7 @@ from app.services.billing import (
     price_id_for_tier,
     verify_and_parse_webhook,
 )
+from app.services.usage import PLAN_DEFINITIONS, compute_usage_summary
 
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 
@@ -102,6 +105,46 @@ def get_subscription(
         subscription_tier=merchant.subscription_tier,
         subscription_current_period_end=merchant.subscription_current_period_end,
         trial_ends_at=merchant.trial_ends_at,
+    )
+
+
+@router.get("/plans", response_model=list[PlanOut])
+def list_plans() -> list[PlanOut]:
+    """Usage-based pricing table (app/services/usage.py) -- single source
+    of truth the frontend renders instead of hardcoding plan copy, same
+    pattern as GET /settings/business-types. Not gated behind an active
+    subscription (this router never is -- see module docstring): a
+    locked-out merchant needs to see plan options to resubscribe."""
+    return [
+        PlanOut(
+            tier=p.tier,
+            name=p.name,
+            base_price_gbp=p.base_price_gbp,
+            included_runs=p.included_runs,
+            overage_price_gbp=p.overage_price_gbp,
+        )
+        for p in PLAN_DEFINITIONS.values()
+    ]
+
+
+@router.get("/usage", response_model=UsageOut)
+def get_usage(
+    db: Session = Depends(get_db),
+    current_user: TeamMember = Depends(get_current_user),
+) -> UsageOut:
+    """Current calendar-month insight-run usage vs. the merchant's plan
+    allowance. Uses get_current_user (not require_active_subscription),
+    same reasoning as GET /subscription -- a merchant deciding whether to
+    resubscribe needs to see this too."""
+    summary = compute_usage_summary(db, current_user.merchant)
+    return UsageOut(
+        period_start=summary.period_start,
+        tier=summary.plan.tier,
+        plan_name=summary.plan.name,
+        included_runs=summary.plan.included_runs,
+        insight_runs_used=summary.insight_runs_used,
+        overage_runs=summary.overage_runs,
+        estimated_overage_cost_gbp=summary.estimated_overage_cost_gbp,
     )
 
 

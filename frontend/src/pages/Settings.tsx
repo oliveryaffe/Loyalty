@@ -15,10 +15,9 @@ import {
  * Notification settings (PLAN_BATCH3.md §3): self-serve Slack webhook URL +
  * notification email + on/off toggles for churn-escalation and fraud-alert
  * notifications. No dedicated page/route is specified in the plan text for
- * §3 (unlike §4's Winback.tsx, which the plan calls out explicitly) -- this
- * page exists because the settings are described as "self-serve, no owner
- * dependency", which requires *some* UI for a merchant to actually reach
- * them.
+ * §3 -- this page exists because the settings are described as "self-serve,
+ * no owner dependency", which requires *some* UI for a merchant to
+ * actually reach them.
  */
 export default function Settings() {
   const [settings, setSettings] = useState<NotificationSettingsOut | null>(null);

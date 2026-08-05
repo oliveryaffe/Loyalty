@@ -28,3 +28,32 @@ class SubscriptionOut(BaseModel):
     subscription_tier: str | None
     subscription_current_period_end: datetime | None
     trial_ends_at: datetime | None
+
+
+class PlanOut(BaseModel):
+    """One row of the usage-based pricing table (app/services/usage.py) --
+    a flat monthly base fee that includes a number of "insight runs" per
+    month (a CSV upload processed or a report exported -- see UsageEvent),
+    plus a per-run rate for anything beyond that. Replaces the old
+    per-member-count tier caps."""
+
+    tier: SubscriptionTier
+    name: str
+    base_price_gbp: float
+    included_runs: int
+    overage_price_gbp: float
+
+
+class UsageOut(BaseModel):
+    """Current calendar-month insight-run usage against the merchant's
+    plan allowance (app/services/usage.py::compute_usage_summary).
+    `estimated_overage_cost_gbp` is informational only -- it is not yet
+    charged automatically (see usage.py's module docstring)."""
+
+    period_start: datetime
+    tier: SubscriptionTier
+    plan_name: str
+    included_runs: int
+    insight_runs_used: int
+    overage_runs: int
+    estimated_overage_cost_gbp: float

@@ -338,6 +338,31 @@ class BillingEvent(Base):
     raw_payload: Mapped[str] = mapped_column(Text, default="")
 
 
+class UsageEvent(Base):
+    """One row per billable "insight run" -- the unit pricing moved to
+    once the platform repositioned away from a per-member loyalty price
+    (see app/services/usage.py's module docstring for the full reasoning).
+    Recorded at the two points a merchant deliberately asks Ledgerly to
+    turn their data into something: a CSV upload processed
+    (app/api/insights.py::upload_insights_csv) and a report exported
+    (app/api/insights.py::get_insights_report_csv). Deliberately NOT
+    recorded on every dashboard page load / churn-score read -- those
+    happen incidentally just by having the dashboard open, and billing a
+    merchant for looking at their own screen would be a bad-faith metric.
+
+    Purely additive, brand-new table (zero migration risk, same as
+    BillingEvent above). No `unique` constraint -- a merchant can generate
+    many usage events per billing period; `kind` + `created_at` are what
+    app/services/usage.py::compute_usage_summary aggregates over."""
+
+    __tablename__ = "usage_events"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    merchant_id: Mapped[str] = mapped_column(ForeignKey("merchants.id"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)  # "csv_upload" | "report_download"
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
 class WinbackRule(Base):
     """One reward preference per merchant, used by the win-back worklist
     (app/services/winback.py::get_winback_worklist) to suggest what to

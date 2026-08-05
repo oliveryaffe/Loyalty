@@ -25,6 +25,7 @@ from app.db.base import get_db
 from app.db.models import Member, Merchant
 from app.schemas.insights import FutureValueOut, InsightsUploadResult, NextBestOut
 from app.services.csv_ingest import CsvUploadError, parse_and_ingest_csv
+from app.services.usage import record_usage_event
 
 router = APIRouter(prefix="/api/v1/insights", tags=["insights"])
 
@@ -82,6 +83,11 @@ async def upload_insights_csv(
         # csv_ingest.py's docstring.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    # Billable insight run (app/services/usage.py) -- recorded even if
+    # every row failed validation; the merchant still asked Ledgerly to
+    # process a file, which is the unit of work being priced, not row
+    # count.
+    record_usage_event(db, merchant, "csv_upload")
     db.commit()
     return result
 
@@ -182,6 +188,13 @@ def get_insights_report_csv(
         )
 
     buffer.seek(0)
+
+    # Billable insight run (app/services/usage.py) -- a report export is
+    # the other deliberate "turn my data into insight" action, alongside
+    # CSV upload above.
+    record_usage_event(db, merchant, "report_download")
+    db.commit()
+
     return StreamingResponse(
         iter([buffer.getvalue()]),
         media_type="text/csv",

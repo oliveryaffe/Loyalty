@@ -6,15 +6,38 @@ import {
   createCheckoutSession,
   createPortalSession,
   getSubscription,
+  listPlans,
+  PlanOut,
   SubscriptionOut,
   SubscriptionTier,
 } from "../api/client";
 
-export const TIER_PLANS: { tier: SubscriptionTier; name: string; price: string; cap: string }[] = [
-  { tier: "starter", name: "Starter", price: "£49/mo", cap: "up to 1,000 members" },
-  { tier: "growth", name: "Growth", price: "£149/mo", cap: "up to 10,000 members" },
-  { tier: "scale", name: "Scale", price: "£399/mo", cap: "unlimited members" },
-];
+// Fetched from GET /billing/plans (backend/app/services/usage.py) rather
+// than hardcoded here -- usage-based pricing (base fee + included insight
+// runs + overage rate) replaced the old per-member-count tier caps, and a
+// single backend source of truth means the two can't drift. See
+// PlanCard below for how a PlanOut renders.
+export function formatPlanPrice(plan: PlanOut): string {
+  return `£${plan.base_price_gbp.toFixed(0)}/mo`;
+}
+
+export function formatPlanAllowance(plan: PlanOut): string {
+  return `${plan.included_runs.toLocaleString()} insight runs included, then £${plan.overage_price_gbp.toFixed(2)}/run`;
+}
+
+export function usePlans() {
+  const [plans, setPlans] = useState<PlanOut[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    listPlans()
+      .then((p) => !cancelled && setPlans(p))
+      .catch(() => !cancelled && setPlans([]));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return plans;
+}
 
 /**
  * Wraps the authenticated dashboard (mounted from App.tsx's RequireAuth,
@@ -119,6 +142,7 @@ function PastDueBanner({ onDismiss }: { onDismiss: () => void }) {
 }
 
 function SubscriptionRequiredScreen({ status }: { status: string | null }) {
+  const plans = usePlans();
   const [actingTier, setActingTier] = useState<SubscriptionTier | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,11 +188,11 @@ function SubscriptionRequiredScreen({ status }: { status: string | null }) {
         </p>
         {error && <p className="error-text">{error}</p>}
         <div className="tier-grid">
-          {TIER_PLANS.map((t) => (
+          {(plans ?? []).map((t) => (
             <div className="tier-card" key={t.tier}>
               <div className="tier-name">{t.name}</div>
-              <div className="tier-price">{t.price}</div>
-              <div className="tier-cap">{t.cap}</div>
+              <div className="tier-price">{formatPlanPrice(t)}</div>
+              <div className="tier-cap">{formatPlanAllowance(t)}</div>
               <button
                 className="primary"
                 disabled={actingTier !== null}

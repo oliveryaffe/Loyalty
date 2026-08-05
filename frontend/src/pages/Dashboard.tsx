@@ -2,22 +2,43 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
+  BusinessProfileOut,
+  BusinessTypeOption,
   FraudAlertOut,
   FutureValueOut,
+  getBusinessProfile,
   getFraudAlerts,
   getFutureValue,
+  listBusinessTypes,
   listMembers,
   listTransactions,
   MemberWithChurn,
   TransactionOut,
 } from "../api/client";
-import { formatGBP } from "../utils";
+import { formatGBP, formatDateUK } from "../utils";
+
+function calibrationStatusText(
+  profile: BusinessProfileOut | null,
+  businessTypes: BusinessTypeOption[] | null
+): string | null {
+  if (!profile) return null;
+  if (profile.calibration_source === "calibrated") {
+    return "Calibrated from your own transaction history.";
+  }
+  if (profile.calibration_source === "default_vertical") {
+    const label = businessTypes?.find((opt) => opt.value === profile.business_type)?.label ?? "your business type";
+    return `Using ${label} starting defaults — not enough of your own history yet.`;
+  }
+  return "Using generic starting defaults — set a business type in Settings for a better starting point.";
+}
 
 export default function Dashboard() {
   const [members, setMembers] = useState<MemberWithChurn[] | null>(null);
   const [transactions, setTransactions] = useState<TransactionOut[] | null>(null);
   const [alerts, setAlerts] = useState<FraudAlertOut[] | null>(null);
   const [futureValue, setFutureValue] = useState<FutureValueOut[] | null>(null);
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfileOut | null>(null);
+  const [businessTypes, setBusinessTypes] = useState<BusinessTypeOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,13 +48,17 @@ export default function Dashboard() {
       listTransactions(undefined, 10),
       getFraudAlerts(true),
       getFutureValue(90),
+      getBusinessProfile(),
+      listBusinessTypes(),
     ])
-      .then(([m, t, a, fv]) => {
+      .then(([m, t, a, fv, profile, types]) => {
         if (cancelled) return;
         setMembers(m);
         setTransactions(t);
         setAlerts(a);
         setFutureValue(fv);
+        setBusinessProfile(profile);
+        setBusinessTypes(types);
       })
       .catch((err) => !cancelled && setError(String(err)));
     return () => {
@@ -52,17 +77,28 @@ export default function Dashboard() {
     members?.filter((m) => m.churn_risk_band === "high").length ?? 0;
   const unresolvedAlerts = alerts?.filter((a) => !a.resolved).length ?? 0;
 
+  const memberNames = new Map(
+    (members ?? []).map((m) => [m.id, `${m.first_name} ${m.last_name}`])
+  );
+
+  const statusText = calibrationStatusText(businessProfile, businessTypes);
+
   return (
     <div>
       <h2>Dashboard</h2>
       {error && <p className="error-text">{error}</p>}
+      {statusText && !loading && (
+        <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8, marginBottom: 16 }}>
+          {statusText} <Link to="/settings">Change business type &rarr;</Link>
+        </p>
+      )}
       {loading && !error ? (
         <p className="loading">Loading overview...</p>
       ) : (
         <>
           <div className="card-grid">
             <div className="card">
-              <div className="label">Members</div>
+              <div className="label">Customers Tracked</div>
               <div className="value">{members!.length}</div>
             </div>
             <div className="card">
@@ -82,30 +118,28 @@ export default function Dashboard() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
             <section>
               <div className="toolbar">
-                <h3 style={{ margin: 0 }}>Recent Transactions</h3>
+                <h3 style={{ margin: 0 }}>Recent Activity</h3>
                 <Link to="/members">View members &rarr;</Link>
               </div>
               {transactions!.length === 0 ? (
-                <p className="empty">No transactions yet.</p>
+                <p className="empty">No activity yet.</p>
               ) : (
                 <table>
                   <thead>
                     <tr>
-                      <th>Member</th>
-                      <th>Type</th>
+                      <th>Customer</th>
                       <th>Amount</th>
-                      <th>Points</th>
                       <th>Channel</th>
+                      <th>Date</th>
                     </tr>
                   </thead>
                   <tbody>
                     {transactions!.map((t) => (
                       <tr key={t.id}>
-                        <td>{t.member_id.slice(0, 8)}</td>
-                        <td>{t.type}</td>
+                        <td>{memberNames.get(t.member_id) ?? t.member_id.slice(0, 8)}</td>
                         <td>{formatGBP(t.amount_gbp)}</td>
-                        <td>{t.points > 0 ? `+${t.points}` : t.points}</td>
                         <td>{t.channel}</td>
+                        <td>{formatDateUK(t.created_at)}</td>
                       </tr>
                     ))}
                   </tbody>

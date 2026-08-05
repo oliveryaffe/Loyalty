@@ -416,6 +416,36 @@ export function createPortalSession(): Promise<PortalSessionOut> {
   return request<PortalSessionOut>("/billing/portal-session", { method: "POST" });
 }
 
+// Usage-based pricing (replaces the earlier per-member-count tier caps --
+// see backend/app/services/usage.py's module docstring). A "plan" is a
+// flat monthly base fee that includes a number of insight runs (a CSV
+// upload processed or a report exported) plus a per-run overage rate.
+export interface PlanOut {
+  tier: SubscriptionTier;
+  name: string;
+  base_price_gbp: number;
+  included_runs: number;
+  overage_price_gbp: number;
+}
+
+export interface UsageOut {
+  period_start: string;
+  tier: SubscriptionTier;
+  plan_name: string;
+  included_runs: number;
+  insight_runs_used: number;
+  overage_runs: number;
+  estimated_overage_cost_gbp: number;
+}
+
+export function listPlans(): Promise<PlanOut[]> {
+  return request<PlanOut[]>("/billing/plans");
+}
+
+export function getUsage(): Promise<UsageOut> {
+  return request<UsageOut>("/billing/usage");
+}
+
 // ---------------------------------------------------------------------
 // Notification settings (Batch 3 §3)
 // ---------------------------------------------------------------------
@@ -479,50 +509,12 @@ export function updateBusinessProfile(businessType: string): Promise<BusinessPro
 }
 
 // ---------------------------------------------------------------------
-// Win-back worklist -- reworked from an auto-executing campaign into a
-// read-only suggestion list (see backend/app/services/winback.py). No
-// more "run", no more offer history, no more auto_trigger.
-// ---------------------------------------------------------------------
-
-export interface WinbackRuleOut {
-  id: string | null;
-  merchant_id: string;
-  enabled: boolean;
-  churn_risk_threshold: number;
-  reward_id: string | null;
-}
-
-export interface WinbackRuleIn {
-  enabled: boolean;
-  churn_risk_threshold: number;
-  reward_id: string;
-}
-
-export interface WinbackWorklistEntry {
-  member_id: string;
-  first_name: string;
-  last_name: string;
-  churn_risk_score: number;
-  risk_band: string;
-  suggested_reward_id: string | null;
-  suggested_reward_name: string | null;
-}
-
-export function getWinbackRule(): Promise<WinbackRuleOut> {
-  return request<WinbackRuleOut>("/winback/rule");
-}
-
-export function saveWinbackRule(payload: WinbackRuleIn): Promise<WinbackRuleOut> {
-  return request<WinbackRuleOut>("/winback/rule", {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function getWinbackWorklist(): Promise<WinbackWorklistEntry[]> {
-  return request<WinbackWorklistEntry[]>("/winback/worklist");
-}
-
+// Note: the dedicated Win-back page/nav tab was removed -- at-risk
+// members are now surfaced via the Members page's risk filter (churn
+// risk data already comes back on MemberWithChurn, no separate fetch
+// needed). The backend's GET/PUT /winback/rule + GET /winback/worklist
+// endpoints still exist for programmatic use, but nothing in this
+// frontend calls them anymore.
 // ---------------------------------------------------------------------
 // A/B testing for reward structures (Batch 3 §5)
 // ---------------------------------------------------------------------

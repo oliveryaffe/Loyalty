@@ -12,7 +12,6 @@ import Login from "./pages/Login";
 import Members from "./pages/Members";
 import Rewards from "./pages/Rewards";
 import Settings from "./pages/Settings";
-import Winback from "./pages/Winback";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -49,7 +48,6 @@ function AppRoutes() {
         <Route path="rewards" element={<Rewards />} />
         <Route path="fraud-alerts" element={<FraudAlerts />} />
         <Route path="insights" element={<Insights />} />
-        <Route path="winback" element={<Winback />} />
         <Route path="settings" element={<Settings />} />
         <Route path="billing" element={<Billing />} />
       </Route>

@@ -16,10 +16,13 @@ type SortKey =
   | "churn_risk_score"
   | "last_activity_at";
 
+type RiskFilter = "all" | "high" | "medium" | "low";
+
 export default function Members() {
   const [members, setMembers] = useState<MemberWithChurn[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("churn_risk_score");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [selectedMember, setSelectedMember] = useState<MemberWithChurn | null>(
@@ -56,6 +59,9 @@ export default function Members() {
           m.email.toLowerCase().includes(q)
       );
     }
+    if (riskFilter !== "all") {
+      rows = rows.filter((m) => m.churn_risk_band === riskFilter);
+    }
     const sorted = [...rows].sort((a, b) => {
       let av: number | string;
       let bv: number | string;
@@ -87,7 +93,7 @@ export default function Members() {
       return 0;
     });
     return sorted;
-  }, [members, search, sortKey, sortDir]);
+  }, [members, search, riskFilter, sortKey, sortDir]);
 
   function openMember(m: MemberWithChurn) {
     setSelectedMember(m);
@@ -112,6 +118,17 @@ export default function Members() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <select
+          className="pill-select"
+          value={riskFilter}
+          onChange={(e) => setRiskFilter(e.target.value as RiskFilter)}
+          aria-label="Filter by churn risk"
+        >
+          <option value="all">All risk levels</option>
+          <option value="high">High risk only</option>
+          <option value="medium">Medium risk only</option>
+          <option value="low">Low risk only</option>
+        </select>
         <span style={{ fontSize: 13, color: "#94a3b8" }}>
           {members ? `${filtered.length} of ${members.length} members` : ""}
         </span>

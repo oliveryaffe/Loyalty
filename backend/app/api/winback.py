@@ -3,6 +3,17 @@ suggest) plus a computed, read-only list of at-risk members. Reworked
 (see app/services/winback.py) from an auto-executing campaign feature --
 there is no more "run", no more offer history, no more auto-trigger.
 
+The dedicated Win-back nav tab/page was later removed from the frontend
+entirely -- once Ledgerly repositioned as a pure data/insights layer (not
+a system that plans or triggers retention campaigns), a standalone
+"suggested reward" workflow no longer fit. At-risk members are now
+surfaced via a plain risk filter on the Members page, reusing the churn
+risk data already returned by GET /members -- no dedicated worklist
+fetch needed there. These endpoints are kept (additive-only schema/API
+policy -- nothing here is destructive to remove, so there's no forcing
+function to delete it) for any merchant integrating against the API
+directly, but nothing in the current frontend calls them.
+
 Gated with `require_active_subscription`/`require_admin_active_subscription`,
 consistent with every other paid-tier feature router in this codebase.
 """
