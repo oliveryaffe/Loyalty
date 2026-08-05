@@ -129,3 +129,26 @@ def update_business_profile(
         business_type=merchant.business_type,
         calibration_source=calibration.source,
     )
+
+
+@router.post("/business-profile/reset", response_model=BusinessProfileOut)
+def reset_business_profile(
+    db: Session = Depends(get_db),
+    merchant: Merchant = Depends(require_admin_active_subscription),
+) -> BusinessProfileOut:
+    """Clears business_type back to NULL so the onboarding picker
+    (frontend's OnboardingModal, shown whenever business_type is NULL)
+    replays on next dashboard load -- lets a merchant (or someone giving a
+    demo) re-trigger the getting-started flow on an existing account
+    instead of only ever seeing it once on a brand-new signup. Does not
+    touch any transaction/member data -- purely resets the one onboarding
+    flag, so real calibration (once a merchant has enough history) is
+    unaffected either way."""
+    merchant.business_type = None
+    db.commit()
+    db.refresh(merchant)
+    calibration = compute_merchant_calibration(db, merchant.id)
+    return BusinessProfileOut(
+        business_type=merchant.business_type,
+        calibration_source=calibration.source,
+    )

@@ -166,3 +166,46 @@ def test_calibration_ignores_business_type_once_real_history_exists(client, db_s
 
     calibration = compute_merchant_calibration(db_session, merchant_id, now=now)
     assert calibration.source == "calibrated"
+
+
+# ---------------------------------------------------------------------------
+# POST /settings/business-profile/reset
+# ---------------------------------------------------------------------------
+
+
+def test_reset_clears_business_type_back_to_null(client, admin_headers):
+    client.patch("/api/v1/settings/business-profile", json={"business_type": "retail"}, headers=admin_headers)
+
+    resp = client.post("/api/v1/settings/business-profile/reset", headers=admin_headers)
+    assert resp.status_code == 200
+    assert resp.json()["business_type"] is None
+    assert resp.json()["calibration_source"] == "default"
+
+    refetched = client.get("/api/v1/settings/business-profile", headers=admin_headers)
+    assert refetched.json()["business_type"] is None
+
+
+def test_reset_requires_admin_role(client, admin_headers):
+    client.patch("/api/v1/settings/business-profile", json={"business_type": "retail"}, headers=admin_headers)
+    client.post(
+        "/api/v1/team/invite",
+        json={"email": "profile-reset-teammate@acme.example.com", "password": "teammate-pw1", "role": "member"},
+        headers=admin_headers,
+    )
+    login = client.post(
+        "/api/v1/auth/login", json={"email": "profile-reset-teammate@acme.example.com", "password": "teammate-pw1"}
+    )
+    member_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    resp = client.post("/api/v1/settings/business-profile/reset", headers=member_headers)
+    assert resp.status_code == 403
+
+    # business_type is unchanged after the rejected reset attempt.
+    assert client.get("/api/v1/settings/business-profile", headers=admin_headers).json()["business_type"] == "retail"
+
+
+def test_reset_is_a_noop_when_already_unset(client, admin_headers):
+    resp = client.post("/api/v1/settings/business-profile/reset", headers=admin_headers)
+    assert resp.status_code == 200
+    assert resp.json()["business_type"] is None
+

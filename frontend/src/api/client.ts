@@ -508,6 +508,14 @@ export function updateBusinessProfile(businessType: string): Promise<BusinessPro
   });
 }
 
+// Clears business_type back to null so the onboarding picker (see
+// components/OnboardingModal.tsx) replays on next dashboard load --
+// lets you re-trigger the getting-started flow on an existing/demo
+// account instead of only ever seeing it once on a brand-new signup.
+export function resetBusinessProfile(): Promise<BusinessProfileOut> {
+  return request<BusinessProfileOut>("/settings/business-profile/reset", { method: "POST" });
+}
+
 // ---------------------------------------------------------------------
 // Note: the dedicated Win-back page/nav tab was removed -- at-risk
 // members are now surfaced via the Members page's risk filter (churn

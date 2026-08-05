@@ -7,6 +7,7 @@ import {
   getNotificationSettings,
   listBusinessTypes,
   NotificationSettingsOut,
+  resetBusinessProfile,
   updateBusinessProfile,
   updateNotificationSettings,
 } from "../api/client";
@@ -36,6 +37,7 @@ export default function Settings() {
   const [savingBusinessType, setSavingBusinessType] = useState(false);
   const [businessTypeError, setBusinessTypeError] = useState<string | null>(null);
   const [businessTypeSaved, setBusinessTypeSaved] = useState(false);
+  const [resettingSetup, setResettingSetup] = useState(false);
 
   function loadBusinessProfile() {
     Promise.all([getBusinessProfile(), listBusinessTypes()])
@@ -62,6 +64,21 @@ export default function Settings() {
       setBusinessTypeError(isApiError(err) ? err.message : "Unable to save business type.");
     } finally {
       setSavingBusinessType(false);
+    }
+  }
+
+  async function handleRestartSetup() {
+    setBusinessTypeError(null);
+    setResettingSetup(true);
+    try {
+      await resetBusinessProfile();
+      // Full reload (not just local state) so OnboardingModal's mount
+      // effect re-fires and picks up business_type=null -- it only
+      // checks once per mount, see components/OnboardingModal.tsx.
+      window.location.reload();
+    } catch (err) {
+      setBusinessTypeError(isApiError(err) ? err.message : "Unable to restart setup.");
+      setResettingSetup(false);
     }
   }
 
@@ -152,6 +169,19 @@ export default function Settings() {
             Business type saved.
           </p>
         )}
+        <button
+          type="button"
+          className="secondary"
+          style={{ marginTop: 16 }}
+          onClick={handleRestartSetup}
+          disabled={resettingSetup}
+        >
+          {resettingSetup ? "Restarting..." : "Restart getting-started setup"}
+        </button>
+        <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
+          Clears the business type above and re-shows the getting-started flow next time the dashboard
+          loads -- handy for replaying it on this account instead of only ever seeing it once.
+        </p>
       </div>
 
       <h2>Notification Settings</h2>
