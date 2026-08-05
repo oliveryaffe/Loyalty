@@ -24,13 +24,19 @@ from app.api.deps import require_active_subscription, require_admin_active_subsc
 from app.db.base import get_db
 from app.db.models import Member, Merchant
 from app.schemas.insights import (
+    BusinessInsightsOut,
+    CategoryPerformanceOut,
+    ChurnDriverOut,
     FutureValueOut,
     InsightsUploadResult,
     NextBestOut,
+    RevenueAtRiskOut,
     SampleDataOut,
     SampleDataRequest,
     SampleDataStatusOut,
+    TrendOut,
 )
+from app.services.business_insights import compute_business_insights
 from app.services.csv_ingest import CsvUploadError, parse_and_ingest_csv
 from app.services.sample_data import (
     SAMPLE_DATA_BUSINESS_TYPES,
@@ -212,6 +218,61 @@ def get_next_best_product(
         )
         for r in ranked
     ]
+
+
+@router.get("/business-insights", response_model=BusinessInsightsOut)
+def get_business_insights(
+    db: Session = Depends(get_db),
+    merchant: Merchant = Depends(require_active_subscription),
+) -> BusinessInsightsOut:
+    """Business-level "so what" report -- see
+    app/services/business_insights.py's module docstring. Also
+    opportunistically persists a MerchantMetricSnapshot row (hence the
+    commit below), same "compute-on-request" pattern as the weekly
+    digest's snapshot-free equivalent."""
+    report = compute_business_insights(db, merchant)
+    db.commit()
+
+    return BusinessInsightsOut(
+        generated_at=report.generated_at,
+        total_members=report.total_members,
+        revenue_at_risk=RevenueAtRiskOut(
+            total_future_value_gbp=report.revenue_at_risk.total_future_value_gbp,
+            at_risk_future_value_gbp=report.revenue_at_risk.at_risk_future_value_gbp,
+            at_risk_share=report.revenue_at_risk.at_risk_share,
+            headline=report.revenue_at_risk.headline,
+        ),
+        trend=(
+            TrendOut(
+                previous_captured_at=report.trend.previous_captured_at,
+                days_since_previous=report.trend.days_since_previous,
+                high_risk_count_delta=report.trend.high_risk_count_delta,
+                at_risk_future_value_gbp_delta=report.trend.at_risk_future_value_gbp_delta,
+                headline=report.trend.headline,
+            )
+            if report.trend
+            else None
+        ),
+        churn_driver=(
+            ChurnDriverOut(
+                dominant_driver=report.churn_driver.dominant_driver,
+                share_of_high_risk=report.churn_driver.share_of_high_risk,
+                headline=report.churn_driver.headline,
+            )
+            if report.churn_driver
+            else None
+        ),
+        top_categories=[
+            CategoryPerformanceOut(
+                category=c.category,
+                source=c.source,
+                engaged_members=c.engaged_members,
+                avg_future_value_gbp=c.avg_future_value_gbp,
+                lift_pct=c.lift_pct,
+            )
+            for c in report.top_categories
+        ],
+    )
 
 
 @router.get("/report.csv")

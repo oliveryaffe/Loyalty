@@ -341,6 +341,48 @@ export function getFutureValueForMember(
   );
 }
 
+export interface RevenueAtRiskOut {
+  total_future_value_gbp: number;
+  at_risk_future_value_gbp: number;
+  at_risk_share: number | null;
+  headline: string;
+}
+
+export interface TrendOut {
+  previous_captured_at: string;
+  days_since_previous: number;
+  high_risk_count_delta: number;
+  at_risk_future_value_gbp_delta: number;
+  headline: string;
+}
+
+export interface ChurnDriverOut {
+  dominant_driver: "recency" | "frequency" | "monetary" | null;
+  share_of_high_risk: number;
+  headline: string;
+}
+
+export interface CategoryPerformanceOut {
+  category: string;
+  source: "redemption" | "purchase";
+  engaged_members: number;
+  avg_future_value_gbp: number;
+  lift_pct: number;
+}
+
+export interface BusinessInsightsOut {
+  generated_at: string;
+  total_members: number;
+  revenue_at_risk: RevenueAtRiskOut;
+  trend: TrendOut | null;
+  churn_driver: ChurnDriverOut | null;
+  top_categories: CategoryPerformanceOut[];
+}
+
+export function getBusinessInsights(): Promise<BusinessInsightsOut> {
+  return request<BusinessInsightsOut>(`/insights/business-insights`);
+}
+
 export function getNextBestProduct(memberId: string, topN = 3): Promise<NextBestOut[]> {
   return request<NextBestOut[]>(`/insights/next-best-product/${memberId}?top_n=${topN}`);
 }

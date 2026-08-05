@@ -2,6 +2,7 @@
 future-value predictions, next-best-product recommendations
 (PLAN_BATCH2.md §5). Shapes copied 1:1 from the plan's schema block.
 """
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -61,3 +62,48 @@ class NextBestOut(BaseModel):
     score: float
     reason: str
     data_granularity: Literal["product", "category"]
+
+
+class RevenueAtRiskOut(BaseModel):
+    total_future_value_gbp: float
+    at_risk_future_value_gbp: float
+    at_risk_share: float | None
+    headline: str
+
+
+class TrendOut(BaseModel):
+    previous_captured_at: datetime
+    days_since_previous: int
+    high_risk_count_delta: int
+    at_risk_future_value_gbp_delta: float
+    headline: str
+
+
+class ChurnDriverOut(BaseModel):
+    dominant_driver: Literal["recency", "frequency", "monetary"] | None
+    share_of_high_risk: float
+    headline: str
+
+
+class CategoryPerformanceOut(BaseModel):
+    category: str
+    source: Literal["redemption", "purchase"]
+    engaged_members: int
+    avg_future_value_gbp: float
+    lift_pct: float
+
+
+class BusinessInsightsOut(BaseModel):
+    """Business-level "so what" report -- app/services/business_insights.py.
+    Powers a new panel on the Insights page, above the per-member table:
+    ties churn risk + future value into one revenue-at-risk headline, a
+    trend vs the last time this was measured, the dominant reason behind
+    the current at-risk cohort, and which reward/purchase categories are
+    actually associated with higher-value customers."""
+
+    generated_at: datetime
+    total_members: int
+    revenue_at_risk: RevenueAtRiskOut
+    trend: TrendOut | None
+    churn_driver: ChurnDriverOut | None
+    top_categories: list[CategoryPerformanceOut]

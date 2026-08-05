@@ -561,3 +561,37 @@ class ExperimentAssignment(Base):
     assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     __table_args__ = (UniqueConstraint("experiment_id", "member_id"),)
+
+
+class MerchantMetricSnapshot(Base):
+    """A periodic point-in-time capture of a merchant's aggregate
+    dashboard metrics (competitive-brief-style "so what" reporting --
+    app/services/business_insights.py). Nothing in this codebase stores
+    metrics over time anywhere else -- every existing score (churn risk,
+    future value) is computed fresh on each request from raw transaction
+    history, which is correct for "what is true right now" but can't
+    answer "did this get better or worse" without something to diff
+    against. This table is that something.
+
+    Captured opportunistically (no scheduler, same established pattern as
+    app/services/digest.py) by
+    business_insights.py::compute_business_insights, at most once every
+    MERCHANT_METRIC_SNAPSHOT_MIN_INTERVAL_DAYS -- so repeatedly loading
+    the Insights page doesn't spam rows, but the underlying trend is
+    still reconstructable from whoever happens to load it across a real
+    week of usage.
+
+    Brand-new table -- create_all handles it directly, zero migration risk."""
+
+    __tablename__ = "merchant_metric_snapshots"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    merchant_id: Mapped[str] = mapped_column(ForeignKey("merchants.id"), nullable=False, index=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+    total_members: Mapped[int] = mapped_column(Integer, nullable=False)
+    high_risk_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    medium_risk_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    low_risk_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_future_value_gbp: Mapped[float] = mapped_column(Float, nullable=False)
+    at_risk_future_value_gbp: Mapped[float] = mapped_column(Float, nullable=False)

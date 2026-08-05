@@ -3,9 +3,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { isApiError } from "../AuthContext";
 import {
   AudienceExportFormat,
+  BusinessInsightsOut,
   downloadInsightsReport,
   downloadNextBestAudienceExport,
   FutureValueOut,
+  getBusinessInsights,
   getFutureValue,
   getNextBestProduct,
   InsightsUploadResult,
@@ -29,6 +31,92 @@ function ModelBadge({ modelUsed }: { modelUsed: "trained" | "heuristic" }) {
     }>
       {modelUsed}
     </span>
+  );
+}
+
+function BusinessInsightsPanel({ data }: { data: BusinessInsightsOut }) {
+  const { revenue_at_risk, trend, churn_driver, top_categories } = data;
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <h3 style={{ margin: "0 0 4px" }}>The so-what</h3>
+      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 0, marginBottom: 12 }}>
+        The four numbers above aggregate into a business-level read, not just a per-customer one.
+      </p>
+      <div className="card-grid">
+        <div className="card">
+          <div className="label">Revenue at risk</div>
+          <div className="value">
+            {revenue_at_risk.at_risk_share !== null ? formatGBP(revenue_at_risk.at_risk_future_value_gbp) : "--"}
+          </div>
+          <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 8, marginBottom: 0 }}>
+            {revenue_at_risk.headline}
+          </p>
+        </div>
+
+        <div className="card">
+          <div className="label">Trend</div>
+          {trend ? (
+            <>
+              <div className="value" style={{ fontSize: 20 }}>
+                {trend.high_risk_count_delta > 0 ? "↑" : trend.high_risk_count_delta < 0 ? "↓" : "→"}{" "}
+                {Math.abs(trend.high_risk_count_delta)} high-risk
+              </div>
+              <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 8, marginBottom: 0 }}>
+                {trend.headline}
+              </p>
+            </>
+          ) : (
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 8, marginBottom: 0 }}>
+              First reading captured today -- come back in about a week to see whether things are
+              trending up or down.
+            </p>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="label">Biggest churn driver</div>
+          {churn_driver ? (
+            <>
+              <div className="value" style={{ fontSize: 20, textTransform: "capitalize" }}>
+                {churn_driver.dominant_driver}
+              </div>
+              <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 8, marginBottom: 0 }}>
+                {churn_driver.headline}
+              </p>
+            </>
+          ) : (
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 8, marginBottom: 0 }}>
+              Nobody is currently flagged high-risk -- nothing to dig into right now.
+            </p>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="label">What's actually working</div>
+          {top_categories.length > 0 ? (
+            <ol style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 13 }}>
+              {top_categories.map((c) => (
+                <li key={c.category} style={{ marginBottom: 4 }}>
+                  <strong style={{ textTransform: "capitalize" }}>{c.category}</strong>{" "}
+                  <span style={{ color: c.lift_pct >= 0 ? "var(--mint)" : "var(--coral)" }}>
+                    {c.lift_pct >= 0 ? "+" : ""}
+                    {c.lift_pct.toFixed(0)}%
+                  </span>{" "}
+                  <span style={{ color: "var(--text-secondary)" }}>
+                    vs. average ({c.engaged_members} customers, {c.source === "redemption" ? "redeemed" : "purchased"})
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 8, marginBottom: 0 }}>
+              Not enough reward or purchase history yet to see which categories are pulling their weight.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -56,6 +144,8 @@ export default function Insights() {
   const [exportFormat, setExportFormat] = useState<AudienceExportFormat>("generic");
   const [exportingAudience, setExportingAudience] = useState(false);
   const [exportAudienceError, setExportAudienceError] = useState<string | null>(null);
+
+  const [businessInsights, setBusinessInsights] = useState<BusinessInsightsOut | null | "error">(null);
 
   function loadFutureValues() {
     setFutureValues(null);
@@ -100,6 +190,12 @@ export default function Insights() {
   }
 
   useEffect(loadFutureValues, []);
+
+  useEffect(() => {
+    getBusinessInsights()
+      .then(setBusinessInsights)
+      .catch(() => setBusinessInsights("error"));
+  }, []);
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
@@ -201,6 +297,8 @@ export default function Insights() {
         Predicted future value (90-day) and next-best-category/product per member.
       </p>
       {error && <p className="error-text">{error}</p>}
+
+      {businessInsights && businessInsights !== "error" && <BusinessInsightsPanel data={businessInsights} />}
 
       <div className="toolbar">
         <input
