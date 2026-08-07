@@ -74,6 +74,17 @@ class Merchant(Base):
     # instead of always defaulting to coffee-shop-tuned thresholds.
     business_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
+    # Onboarding: how this merchant currently identifies individual repeat
+    # customers -- a loyalty app, a booking app, checkout/online-order
+    # email capture, an existing ESP list, or "none". Nullable/additive,
+    # same convention as business_type above. Unlike business_type, this
+    # doesn't feed any AI calibration -- it exists purely so onboarding can
+    # tell a merchant who answers "none" that Ledgerly reads existing
+    # customer data rather than creating it, before they hit an empty
+    # dashboard wondering why nothing populated. Never blocks signup or
+    # any feature; see app/api/settings.py::CUSTOMER_DATA_SOURCES.
+    customer_data_source: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
     # Shopify webhook ingestion config (Feature 2). Per-merchant secret,
     # not a single global secret -- different merchants would have
     # different Shopify apps/secrets in production.

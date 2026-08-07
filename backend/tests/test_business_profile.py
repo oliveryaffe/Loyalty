@@ -209,3 +209,64 @@ def test_reset_is_a_noop_when_already_unset(client, admin_headers):
     assert resp.status_code == 200
     assert resp.json()["business_type"] is None
 
+
+# ---------------------------------------------------------------------------
+# Customer data source (second onboarding question)
+# ---------------------------------------------------------------------------
+
+
+def test_data_sources_list_includes_expected_options(client, admin_headers):
+    resp = client.get("/api/v1/settings/data-sources", headers=admin_headers)
+    assert resp.status_code == 200
+    values = {opt["value"] for opt in resp.json()}
+    assert values == {"loyalty_app", "booking_app", "checkout_or_online", "esp_list", "none"}
+
+
+def test_none_option_carries_a_hint_other_options_do_not(client, admin_headers):
+    options = client.get("/api/v1/settings/data-sources", headers=admin_headers).json()
+    by_value = {opt["value"]: opt for opt in options}
+    assert by_value["none"]["hint"] is not None
+    assert "Ledgerly reads your existing customer data" in by_value["none"]["hint"]
+    assert by_value["loyalty_app"]["hint"] is None
+
+
+def test_customer_data_source_defaults_to_none_and_can_be_set(client, admin_headers):
+    profile = client.get("/api/v1/settings/business-profile", headers=admin_headers).json()
+    assert profile["customer_data_source"] is None
+
+    resp = client.patch(
+        "/api/v1/settings/customer-data-source", json={"value": "booking_app"}, headers=admin_headers
+    )
+    assert resp.status_code == 200
+    assert resp.json()["customer_data_source"] == "booking_app"
+
+    refetched = client.get("/api/v1/settings/business-profile", headers=admin_headers)
+    assert refetched.json()["customer_data_source"] == "booking_app"
+
+
+def test_customer_data_source_rejects_invalid_value(client, admin_headers):
+    resp = client.patch(
+        "/api/v1/settings/customer-data-source", json={"value": "carrier_pigeon"}, headers=admin_headers
+    )
+    assert resp.status_code == 400
+
+
+def test_customer_data_source_does_not_gate_any_feature(client, admin_headers):
+    """Answering "none" is purely informational -- the merchant can still
+    use the product exactly as before (e.g. list members, which returns
+    empty rather than erroring)."""
+    resp = client.patch("/api/v1/settings/customer-data-source", json={"value": "none"}, headers=admin_headers)
+    assert resp.status_code == 200
+
+    members_resp = client.get("/api/v1/members", headers=admin_headers)
+    assert members_resp.status_code == 200
+
+
+def test_business_profile_reset_does_not_clear_data_source(client, admin_headers):
+    client.patch("/api/v1/settings/customer-data-source", json={"value": "esp_list"}, headers=admin_headers)
+    client.patch("/api/v1/settings/business-profile", json={"business_type": "retail"}, headers=admin_headers)
+
+    resp = client.post("/api/v1/settings/business-profile/reset", headers=admin_headers)
+    assert resp.status_code == 200
+    assert resp.json()["business_type"] is None
+    assert resp.json()["customer_data_source"] == "esp_list"

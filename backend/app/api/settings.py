@@ -20,6 +20,8 @@ from app.schemas.settings import (
     BusinessProfileOut,
     BusinessProfileUpdate,
     BusinessTypeOption,
+    CustomerDataSourceOption,
+    CustomerDataSourceUpdate,
     NotificationSettingsOut,
     NotificationSettingsUpdate,
 )
@@ -49,6 +51,43 @@ _VALID_BUSINESS_TYPES = {opt.value for opt in BUSINESS_TYPES}
 assert _VALID_BUSINESS_TYPES - {"other"} <= set(BUSINESS_TYPE_CALIBRATIONS), (
     "BUSINESS_TYPES has a value with no matching BUSINESS_TYPE_CALIBRATIONS entry"
 )
+
+# Second onboarding question (see app/db/models.py::Merchant
+# .customer_data_source): how does this merchant currently identify
+# individual repeat customers, if at all. Purely informational -- doesn't
+# gate signup or any feature -- but "none" carries a hint pointing at the
+# fastest realistic fix (turning on the till's own loyalty feature),
+# since a merchant with genuinely zero customer-identifying data will
+# otherwise sign up, see an empty dashboard, and have no idea why.
+CUSTOMER_DATA_SOURCES: list[CustomerDataSourceOption] = [
+    CustomerDataSourceOption(
+        value="loyalty_app",
+        label="A loyalty program (Square Loyalty, Loyverse, a punch-card app, etc.)",
+    ),
+    CustomerDataSourceOption(
+        value="booking_app",
+        label="A booking app (Fresha, Squire, Treatwell, etc.)",
+    ),
+    CustomerDataSourceOption(
+        value="checkout_or_online",
+        label="We ask for email at checkout, on receipts, or through online ordering",
+    ),
+    CustomerDataSourceOption(
+        value="esp_list",
+        label="We already have a Mailchimp/Klaviyo list from somewhere else",
+    ),
+    CustomerDataSourceOption(
+        value="none",
+        label="We don't currently collect this",
+        hint=(
+            "Ledgerly reads your existing customer data -- it can't create it from nothing. "
+            "The fastest way to start is turning on your till's loyalty feature (most, including "
+            "Square Loyalty, are free or near-free and take a few minutes to switch on) so "
+            "customers leave an email at checkout. In the meantime, explore with sample data below."
+        ),
+    ),
+]
+_VALID_CUSTOMER_DATA_SOURCES = {opt.value for opt in CUSTOMER_DATA_SOURCES}
 
 
 def _to_out(merchant: Merchant) -> NotificationSettingsOut:
@@ -102,16 +141,29 @@ def list_business_types() -> list[BusinessTypeOption]:
     return BUSINESS_TYPES
 
 
+@router.get("/data-sources", response_model=list[CustomerDataSourceOption])
+def list_data_sources() -> list[CustomerDataSourceOption]:
+    """Options for onboarding's second question -- how the merchant
+    currently identifies repeat customers. Same "frontend renders
+    whatever this returns" pattern as list_business_types above."""
+    return CUSTOMER_DATA_SOURCES
+
+
+def _business_profile_out(db: Session, merchant: Merchant) -> BusinessProfileOut:
+    calibration = compute_merchant_calibration(db, merchant.id)
+    return BusinessProfileOut(
+        business_type=merchant.business_type,
+        calibration_source=calibration.source,
+        customer_data_source=merchant.customer_data_source,
+    )
+
+
 @router.get("/business-profile", response_model=BusinessProfileOut)
 def get_business_profile(
     db: Session = Depends(get_db),
     merchant: Merchant = Depends(require_active_subscription),
 ) -> BusinessProfileOut:
-    calibration = compute_merchant_calibration(db, merchant.id)
-    return BusinessProfileOut(
-        business_type=merchant.business_type,
-        calibration_source=calibration.source,
-    )
+    return _business_profile_out(db, merchant)
 
 
 @router.patch("/business-profile", response_model=BusinessProfileOut)
@@ -128,11 +180,29 @@ def update_business_profile(
     merchant.business_type = payload.business_type
     db.commit()
     db.refresh(merchant)
-    calibration = compute_merchant_calibration(db, merchant.id)
-    return BusinessProfileOut(
-        business_type=merchant.business_type,
-        calibration_source=calibration.source,
-    )
+    return _business_profile_out(db, merchant)
+
+
+@router.patch("/customer-data-source", response_model=BusinessProfileOut)
+def update_customer_data_source(
+    payload: CustomerDataSourceUpdate,
+    db: Session = Depends(get_db),
+    merchant: Merchant = Depends(require_admin_active_subscription),
+) -> BusinessProfileOut:
+    """Onboarding's second question. Purely informational -- see
+    app/db/models.py::Merchant.customer_data_source -- never gates
+    signup, billing, or any feature; a merchant can answer "none" and
+    keep using the product exactly as before (most likely with sample
+    data, or by connecting a data source later)."""
+    if payload.value not in _VALID_CUSTOMER_DATA_SOURCES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"value must be one of {sorted(_VALID_CUSTOMER_DATA_SOURCES)}",
+        )
+    merchant.customer_data_source = payload.value
+    db.commit()
+    db.refresh(merchant)
+    return _business_profile_out(db, merchant)
 
 
 @router.post("/business-profile/reset", response_model=BusinessProfileOut)
@@ -147,12 +217,11 @@ def reset_business_profile(
     instead of only ever seeing it once on a brand-new signup. Does not
     touch any transaction/member data -- purely resets the one onboarding
     flag, so real calibration (once a merchant has enough history) is
-    unaffected either way."""
+    unaffected either way. customer_data_source is deliberately left as
+    it was -- that question isn't part of the "replay the picker" flow
+    and a merchant's answer to it doesn't become stale just because
+    they're re-choosing their business type."""
     merchant.business_type = None
     db.commit()
     db.refresh(merchant)
-    calibration = compute_merchant_calibration(db, merchant.id)
-    return BusinessProfileOut(
-        business_type=merchant.business_type,
-        calibration_source=calibration.source,
-    )
+    return _business_profile_out(db, merchant)

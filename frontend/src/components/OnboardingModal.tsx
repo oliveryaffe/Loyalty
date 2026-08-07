@@ -4,10 +4,13 @@ import { useNavigate } from "react-router-dom";
 import {
   ApiError,
   BusinessTypeOption,
+  CustomerDataSourceOption,
   getBusinessProfile,
   listBusinessTypes,
+  listDataSources,
   loadSampleData,
   updateBusinessProfile,
+  updateCustomerDataSource,
 } from "../api/client";
 import { isApiError } from "../AuthContext";
 
@@ -16,7 +19,7 @@ import { isApiError } from "../AuthContext";
 // "Other" has no vertical profile to generate from.
 const SAMPLE_DATA_BUSINESS_TYPES = new Set(["coffee_shop", "restaurant", "barber_salon", "retail"]);
 
-type Step = "business_type" | "get_started";
+type Step = "business_type" | "data_source" | "get_started";
 
 /**
  * Two-step getting-started flow, shown once on first dashboard load
@@ -31,7 +34,18 @@ type Step = "business_type" | "get_started";
  * future-value scoring use a vertical-appropriate starting point instead
  * of always defaulting to coffee-shop-tuned thresholds.
  *
- * Step 2 (get started) is a lightweight nudge, not a data requirement --
+ * Step 2 (data source) asks how the merchant currently identifies repeat
+ * customers at all -- a loyalty app, a booking app, checkout/online-order
+ * email capture, an existing ESP list, or none yet. Purely informational
+ * (app/db/models.py::Merchant.customer_data_source) and never blocks
+ * progress, but a merchant who answers "none" sees a one-line explanation
+ * of why the dashboard will look empty and the fastest realistic fix --
+ * most tills (Square etc.) have a free-ish loyalty toggle that starts
+ * capturing emails at checkout. Ledgerly reads customer data, it doesn't
+ * create it, and a business with genuinely no way to identify a repeat
+ * customer yet should know that before exploring further, not after.
+ *
+ * Step 3 (get started) is a lightweight nudge, not a data requirement --
  * closing it without uploading anything is a fully supported path (the
  * pre-loaded demo data, or an empty account, both work fine).
  */
@@ -47,10 +61,16 @@ export default function OnboardingModal() {
   const [loadingSample, setLoadingSample] = useState(false);
   const [sampleLoaded, setSampleLoaded] = useState(false);
 
+  const [dataSources, setDataSources] = useState<CustomerDataSourceOption[] | null>(null);
+  const [dataSourceSaving, setDataSourceSaving] = useState<string | null>(null);
+  const [dataSourceError, setDataSourceError] = useState<string | null>(null);
+  const [dataSourceHint, setDataSourceHint] = useState<string | null>(null);
+
   useEffect(() => {
-    Promise.all([getBusinessProfile(), listBusinessTypes()])
-      .then(([profile, businessTypes]) => {
+    Promise.all([getBusinessProfile(), listBusinessTypes(), listDataSources()])
+      .then(([profile, businessTypes, sources]) => {
         setOptions(businessTypes);
+        setDataSources(sources);
         if (profile.business_type === null) {
           setStep("business_type");
           setVisible(true);
@@ -70,11 +90,32 @@ export default function OnboardingModal() {
       await updateBusinessProfile(value);
       setChosenValue(value);
       setChosenLabel(label);
-      setStep("get_started");
+      setStep("data_source");
     } catch (err) {
       setError(isApiError(err) ? err.message : "Unable to save -- please try again.");
     } finally {
       setSaving(null);
+    }
+  }
+
+  async function chooseDataSource(value: string, hint: string | null) {
+    setDataSourceError(null);
+    setDataSourceSaving(value);
+    try {
+      await updateCustomerDataSource(value);
+      if (hint) {
+        // "None" -- show the explanation instead of advancing straight
+        // through; a merchant with no way to identify repeat customers
+        // yet should see why the dashboard will look empty before they
+        // get there, not after.
+        setDataSourceHint(hint);
+      } else {
+        setStep("get_started");
+      }
+    } catch (err) {
+      setDataSourceError(isApiError(err) ? err.message : "Unable to save -- please try again.");
+    } finally {
+      setDataSourceSaving(null);
     }
   }
 
@@ -113,7 +154,13 @@ export default function OnboardingModal() {
   return (
     <div
       role="dialog"
-      aria-label={step === "business_type" ? "What kind of business is this?" : "Get started"}
+      aria-label={
+        step === "business_type"
+          ? "What kind of business is this?"
+          : step === "data_source"
+          ? "How do you currently keep track of customers?"
+          : "Get started"
+      }
       style={{
         position: "fixed",
         inset: 0,
@@ -148,6 +195,38 @@ export default function OnboardingModal() {
                 </button>
               ))}
             </div>
+          </>
+        ) : step === "data_source" ? (
+          <>
+            <h1>How do you currently keep track of customers?</h1>
+            <p className="subtitle">
+              Ledgerly reads customer data your business already has -- it can't create it. Knowing where
+              yours comes from (or that it doesn't exist yet) helps set expectations for what you'll see.
+            </p>
+            {dataSourceError && <p className="error-text">{dataSourceError}</p>}
+            {dataSourceHint ? (
+              <>
+                <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>{dataSourceHint}</p>
+                <button type="button" className="primary" onClick={() => setStep("get_started")}>
+                  Got it, continue
+                </button>
+              </>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {(dataSources ?? []).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className="secondary"
+                    disabled={dataSourceSaving !== null}
+                    onClick={() => chooseDataSource(opt.value, opt.hint)}
+                    style={{ padding: "12px 14px", textAlign: "left" }}
+                  >
+                    {dataSourceSaving === opt.value ? "Saving..." : opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </>
         ) : (
           <>

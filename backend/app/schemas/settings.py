@@ -40,6 +40,18 @@ class BusinessTypeOption(BaseModel):
     label: str
 
 
+class CustomerDataSourceOption(BaseModel):
+    """`hint` is only populated for the "none" option -- guidance shown
+    inline when a merchant picks it, explaining that Ledgerly reads
+    existing customer data rather than creating it, and the fastest way to
+    get some. Kept server-side (like BUSINESS_TYPES' labels) so the
+    frontend never hardcodes copy that could drift from this list."""
+
+    value: str
+    label: str
+    hint: str | None = None
+
+
 class BusinessProfileOut(BaseModel):
     """`business_type=None` means the merchant hasn't completed onboarding
     yet -- the frontend shows a one-question business-type picker on the
@@ -54,11 +66,20 @@ class BusinessProfileOut(BaseModel):
     "default" (generic starting defaults, no business_type set). Exposed
     so the Settings page can show which mode is actually active instead of
     leaving the business-type picker looking like a no-op once real
-    calibration has taken over."""
+    calibration has taken over.
+
+    `customer_data_source=None` means the onboarding question hasn't been
+    answered yet -- purely informational (see Merchant.customer_data_source
+    in app/db/models.py), never gates any feature."""
 
     business_type: str | None
     calibration_source: str
+    customer_data_source: str | None = None
 
 
 class BusinessProfileUpdate(BaseModel):
     business_type: str
+
+
+class CustomerDataSourceUpdate(BaseModel):
+    value: str

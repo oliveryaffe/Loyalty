@@ -635,13 +635,28 @@ export interface BusinessTypeOption {
   label: string;
 }
 
+// Second onboarding question: how the merchant currently identifies
+// repeat customers. Purely informational (see backend
+// app/db/models.py::Merchant.customer_data_source) -- never gates
+// signup or any feature. `hint` is only populated on the "none" option.
+export interface CustomerDataSourceOption {
+  value: string;
+  label: string;
+  hint: string | null;
+}
+
 export interface BusinessProfileOut {
   business_type: string | null;
   calibration_source: string;
+  customer_data_source: string | null;
 }
 
 export function listBusinessTypes(): Promise<BusinessTypeOption[]> {
   return request<BusinessTypeOption[]>("/settings/business-types");
+}
+
+export function listDataSources(): Promise<CustomerDataSourceOption[]> {
+  return request<CustomerDataSourceOption[]>("/settings/data-sources");
 }
 
 export function getBusinessProfile(): Promise<BusinessProfileOut> {
@@ -652,6 +667,13 @@ export function updateBusinessProfile(businessType: string): Promise<BusinessPro
   return request<BusinessProfileOut>("/settings/business-profile", {
     method: "PATCH",
     body: JSON.stringify({ business_type: businessType }),
+  });
+}
+
+export function updateCustomerDataSource(value: string): Promise<BusinessProfileOut> {
+  return request<BusinessProfileOut>("/settings/customer-data-source", {
+    method: "PATCH",
+    body: JSON.stringify({ value }),
   });
 }
 
