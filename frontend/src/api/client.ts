@@ -607,6 +607,23 @@ export function updateWinbackRule(payload: WinbackRuleIn): Promise<WinbackRuleOu
   });
 }
 
+// Manual, one-off win-back email to a single at-risk customer -- see
+// backend/app/services/winback.py::send_winback_email. `reason` tells you
+// why `sent` is false when it is: "cooldown" (already emailed recently,
+// see cooldown_until), "smtp_not_configured" (a platform-level gap, not
+// something fixable from this account's settings), or "send_failed".
+export interface WinbackEmailOut {
+  sent: boolean;
+  reason: "sent" | "cooldown" | "smtp_not_configured" | "send_failed";
+  cooldown_until: string | null;
+}
+
+export function sendWinbackEmail(memberId: string): Promise<WinbackEmailOut> {
+  return request<WinbackEmailOut>(`/members/${memberId}/winback-email`, {
+    method: "POST",
+  });
+}
+
 // ---------------------------------------------------------------------
 // Onboarding: business-type picker. Feeds the AI layer's calibration
 // fallback for merchants without enough transaction history yet to

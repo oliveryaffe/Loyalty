@@ -11,6 +11,8 @@ import {
   LocationOut,
   MemberWithChurn,
   RecommendationOut,
+  sendWinbackEmail,
+  WinbackEmailOut,
 } from "../api/client";
 import RiskBadge from "../components/RiskBadge";
 import { formatDateUK } from "../utils";
@@ -44,6 +46,9 @@ export default function Members() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [locations, setLocations] = useState<LocationOut[] | null>(null);
   const [savingLocation, setSavingLocation] = useState(false);
+  const [sendingWinbackEmail, setSendingWinbackEmail] = useState(false);
+  const [winbackEmailResult, setWinbackEmailResult] = useState<WinbackEmailOut | null>(null);
+  const [winbackEmailError, setWinbackEmailError] = useState<string | null>(null);
 
   useEffect(() => {
     listMembers(true)
@@ -148,10 +153,42 @@ export default function Members() {
     setSelectedMember(m);
     setRecommendations(null);
     setRecLoading(true);
+    setWinbackEmailResult(null);
+    setWinbackEmailError(null);
     getRecommendations(m.id, 5)
       .then(setRecommendations)
       .catch((err) => setError(String(err)))
       .finally(() => setRecLoading(false));
+  }
+
+  async function handleSendWinbackEmail() {
+    if (!selectedMember) return;
+    setWinbackEmailError(null);
+    setWinbackEmailResult(null);
+    setSendingWinbackEmail(true);
+    try {
+      const result = await sendWinbackEmail(selectedMember.id);
+      setWinbackEmailResult(result);
+    } catch (err) {
+      setWinbackEmailError(isApiError(err) ? err.message : "Unable to send win-back email.");
+    } finally {
+      setSendingWinbackEmail(false);
+    }
+  }
+
+  function winbackEmailMessage(result: WinbackEmailOut): string {
+    switch (result.reason) {
+      case "sent":
+        return `Sent to ${selectedMember?.email}.`;
+      case "cooldown":
+        return result.cooldown_until
+          ? `Already emailed recently -- next eligible ${formatDateUK(result.cooldown_until)}.`
+          : "Already emailed recently.";
+      case "smtp_not_configured":
+        return "Email sending isn't set up for this account yet -- this is a platform setting, not something you can fix from here.";
+      default:
+        return "Couldn't send that email -- try again in a moment.";
+    }
   }
 
   return (
@@ -309,6 +346,36 @@ export default function Members() {
               <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: -4 }}>
                 {selectedMember.churn_risk_explanation}
               </p>
+            )}
+            {(selectedMember.churn_risk_band === "high" || selectedMember.churn_risk_band === "medium") && (
+              <div style={{ marginBottom: 12 }}>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={handleSendWinbackEmail}
+                  disabled={sendingWinbackEmail}
+                >
+                  {sendingWinbackEmail ? "Sending..." : "Send win-back email"}
+                </button>
+                <p className="hint" style={{ marginTop: 6, marginBottom: 0 }}>
+                  A one-off, personal check-in email -- not a campaign, sent once when you click this, to this
+                  customer only. Useful if you do not have Mailchimp/Klaviyo set up (see the export option below
+                  if you do).
+                </p>
+                {winbackEmailError && <p className="error-text" style={{ marginTop: 6 }}>{winbackEmailError}</p>}
+                {winbackEmailResult && !winbackEmailError && (
+                  <p
+                    style={{
+                      fontSize: 13,
+                      marginTop: 6,
+                      marginBottom: 0,
+                      color: winbackEmailResult.sent ? "var(--mint)" : "var(--text-secondary)",
+                    }}
+                  >
+                    {winbackEmailMessage(winbackEmailResult)}
+                  </p>
+                )}
+              </div>
             )}
             {locations && locations.length > 0 && (
               <div className="field" style={{ marginBottom: 12 }}>

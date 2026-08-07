@@ -67,24 +67,52 @@ def send_slack(webhook_url: str, text: str) -> None:
         logger.warning("Slack notification failed (webhook_url=%s)", webhook_url, exc_info=True)
 
 
-def send_email(to_address: str, subject: str, body: str) -> None:
+def send_email(
+    to_address: str,
+    subject: str,
+    body: str,
+    *,
+    from_display_name: str | None = None,
+    reply_to: str | None = None,
+) -> bool:
     """smtplib against settings.smtp_host/port/username/password. No-ops
     with a logger.warning if smtp_host is unset (email sending "off" by
     default until the owner supplies SMTP credentials). Never raises --
-    same reasoning as send_slack, this always runs as a background task."""
+    the original owner-notification callers (churn/fraud alerts, digest)
+    always run this as a background task after the response has already
+    gone out, so an exception here must never surface to the client.
+
+    Returns True/False so a *synchronous* caller (app/services/winback.py's
+    merchant-initiated win-back email, which needs to tell the merchant
+    whether it actually sent) can distinguish success from a skip/failure
+    without duplicating the smtplib plumbing -- existing background-task
+    callers simply don't inspect the return value.
+
+    `from_display_name`/`reply_to` exist for the win-back email specifically:
+    it's sent from Ledgerly's own SMTP identity (merchants don't hand over
+    their domain's DKIM/SPF), but showing "<Business Name> (via Ledgerly)"
+    and routing replies to the merchant's own notification email makes it
+    read as genuinely from the business, not from an unrecognised platform
+    address, without pretending to be a domain we don't control."""
     if not settings.smtp_host:
         logger.warning(
             "Email notification skipped (smtp_host not configured): to=%s subject=%s",
             to_address,
             subject,
         )
-        return
+        return False
 
     try:
         message = EmailMessage()
         message["Subject"] = subject
-        message["From"] = settings.smtp_from_address
+        message["From"] = (
+            f'"{from_display_name}" <{settings.smtp_from_address}>'
+            if from_display_name
+            else settings.smtp_from_address
+        )
         message["To"] = to_address
+        if reply_to:
+            message["Reply-To"] = reply_to
         message.set_content(body)
 
         with smtplib.SMTP(
@@ -94,8 +122,10 @@ def send_email(to_address: str, subject: str, body: str) -> None:
             if settings.smtp_username and settings.smtp_password:
                 smtp.login(settings.smtp_username, settings.smtp_password)
             smtp.send_message(message)
+        return True
     except Exception:
         logger.warning("Email notification failed (to=%s subject=%s)", to_address, subject, exc_info=True)
+        return False
 
 
 def notify_merchant(merchant: Merchant, subject: str, body: str, background_tasks: BackgroundTasks) -> None:

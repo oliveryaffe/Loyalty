@@ -227,6 +227,17 @@ class Member(Base):
     # this feature or were never assigned. See app/services/locations.py.
     location_id: Mapped[str | None] = mapped_column(ForeignKey("locations.id"), nullable=True, index=True)
 
+    # Win-back email cooldown (app/services/winback.py::send_winback_email).
+    # Nullable/additive, same convention as every other column here -- NULL
+    # means "never sent". Stamped only after a real send succeeds (not on a
+    # skipped/failed attempt), so a merchant whose SMTP wasn't configured
+    # yet, or who hit send while mid-cooldown, isn't silently blocked once
+    # the underlying problem is fixed. This is the only piece of state this
+    # feature keeps -- there is no campaign/send history table, deliberately
+    # (see the module docstring on why win-back stays a suggestion, not a
+    # platform).
+    last_winback_email_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     merchant: Mapped["Merchant"] = relationship(back_populates="members")
     transactions: Mapped[list["Transaction"]] = relationship(
         back_populates="member", cascade="all, delete-orphan"

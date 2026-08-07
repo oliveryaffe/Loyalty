@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.churn_model import compute_merchant_calibration, score_member_churn
 from app.ai.next_visit import predict_next_visit_for_all_members
-from app.api.deps import require_active_subscription, require_admin
+from app.api.deps import require_active_subscription, require_admin, require_admin_active_subscription
 from app.db.base import get_db
 from app.db.models import (
     ExperimentAssignment,
@@ -24,6 +24,7 @@ from app.db.models import (
 )
 from app.schemas.gdpr import MemberErasureResult, MemberExportOut
 from app.schemas.member import MemberCreate, MemberOut, MemberWithChurn
+from app.schemas.winback import WinbackEmailOut
 from app.services.audience_export import (
     AUDIENCE_EXPORT_FORMATS,
     DEFAULT_EXPORT_FORMAT,
@@ -32,6 +33,7 @@ from app.services.audience_export import (
     build_next_best_export_rows,
 )
 from app.services.usage import record_usage_event
+from app.services.winback import send_winback_email
 
 router = APIRouter(prefix="/api/v1/members", tags=["members"])
 
@@ -314,3 +316,39 @@ def gdpr_export_member(
         experiment_assignments=experiment_assignments,
         exported_at=datetime.now(timezone.utc),
     )
+
+
+@router.post("/{member_id}/winback-email", response_model=WinbackEmailOut)
+def send_member_winback_email(
+    member_id: str,
+    db: Session = Depends(get_db),
+    merchant: Merchant = Depends(require_admin_active_subscription),
+) -> WinbackEmailOut:
+    """Manual, merchant-clicked single email to one at-risk customer -- see
+    app/services/winback.py::send_winback_email for the cooldown/reward
+    logic and, more importantly, why this doesn't reopen the "Ledgerly
+    shouldn't auto-act on a merchant's behalf" problem the win-back rework
+    was about: this only ever fires because a merchant explicitly hit
+    "send" for this one customer, right now. There's no schedule, no
+    stored campaign, and this response tells the merchant plainly whether
+    it actually went out.
+
+    Gated on `require_admin_active_subscription` (same tier as PUT
+    /winback/rule) rather than the plainer `require_active_subscription`
+    every read-only member endpoint uses -- sending an email to a real
+    customer is a stronger action than viewing or exporting their data,
+    and warrants the same stricter gate as other members-with-a-real-world-
+    effect actions in this codebase.
+
+    404s for the same reasons every other member-scoped endpoint here
+    does: member doesn't exist, belongs to a different merchant, or (new
+    here) has been GDPR-erased -- an erased member's stored email is an
+    anonymised placeholder (see app/services/audience_export.py), so
+    there is nothing real to send to.
+    """
+    member = _get_member_or_404(db, merchant.id, member_id)
+    if member.erased_at is not None:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    result = send_winback_email(db, merchant, member)
+    return WinbackEmailOut(sent=result.sent, reason=result.reason, cooldown_until=result.cooldown_until)
